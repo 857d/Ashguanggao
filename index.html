@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航数据管理器</title>
+    <title>导航数据管理器 - 自动推送至 GitHub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -26,12 +26,12 @@
         <div class="bg-white rounded-lg shadow-lg overflow-hidden">
             <div class="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4">
                 <h1 class="text-2xl font-bold text-white">导航数据管理器</h1>
-                <p class="text-blue-100 text-sm">管理 NAV_DATA 中的分类和项目</p>
+                <p class="text-blue-100 text-sm">管理 NAV_DATA 并自动推送到 GitHub 仓库</p>
             </div>
 
             <!-- 工具栏 -->
             <div class="p-4 border-b flex flex-wrap gap-3 justify-between items-center bg-gray-50">
-                <div class="flex gap-2">
+                <div class="flex gap-2 flex-wrap">
                     <button @click="addCategory" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
                         <i class="fas fa-plus"></i> 添加分类
                     </button>
@@ -43,9 +43,14 @@
                         <input type="file" @change="importData" accept=".json" class="hidden">
                     </label>
                 </div>
-                <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                    <i class="fas fa-code"></i> 生成代码
-                </button>
+                <div class="flex gap-2">
+                    <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i class="fas fa-code"></i> 生成代码
+                    </button>
+                    <button @click="showPushModal" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i class="fab fa-github"></i> 推送到 GitHub
+                    </button>
+                </div>
             </div>
 
             <!-- 分类列表 -->
@@ -118,6 +123,45 @@
                 </div>
             </div>
         </div>
+
+        <!-- 推送配置模态框 -->
+        <div v-if="showPushModalFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModalFlag=false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="text-lg font-semibold">推送到 GitHub 仓库</h3>
+                    <button @click="showPushModalFlag=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label>
+                        <input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx">
+                        <p class="text-xs text-gray-500 mt-1">需要 <code>repo</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" class="text-blue-600">点击创建 Token</a></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label>
+                        <input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label>
+                        <input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/config/navData.ts">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">提交信息 (commit message)</label>
+                        <input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update navigation data">
+                    </div>
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">
+                        <i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改您的仓库文件，请谨慎操作。建议先备份。
+                    </div>
+                </div>
+                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl">
+                    <button @click="showPushModalFlag=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button @click="pushToGitHub" :disabled="pushing" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">
+                        <i v-if="pushing" class="fas fa-spinner fa-spin"></i>
+                        {{ pushing ? '推送中...' : '确认推送' }}
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -129,110 +173,19 @@
                 title: "软件",
                 icon: "lucide:code",
                 items: [
-                    {
-                        name: "客服QQ",
-                        avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp",
-                        description: "任何问题请联系",
-                        url: "https://tool.gljlw.com/qq/?qq=971165458",
-                        category: "在线中",
-                        id: "DEV001"
-                    },
-                    {
-                        name: "客服QQ",
-                        avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp",
-                        description: "购买请联系我",
-                        url: "https://tool.gljlw.com/qq/?qq=1226407713",
-                        category: "在线中",
-                        id: "DEV002"
-                    },
-                    {
-                        name: "Tg客服",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png",
-                        description: "来找我聊天吹水~",
-                        url: "https://t.me/dianbaodashen1",
-                        category: "在线中",
-                        id: "DEV003"
-                    },
-                    {
-                        name: "Telegram",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png",
-                        description: "跨平台的即时通讯软件",
-                        url: "https://telegram.org/",
-                        category: "纸飞机",
-                        id: "DEV004"
-                    },
-                    {
-                        name: "X",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png",
-                        description: "国外人都在用的微博",
-                        url: "https://x.com/",
-                        category: "推特",
-                        id: "DEV005"
-                    },
-                    {
-                        name: "Shadowrocket",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp",
-                        description: "IOS端最好用的加速器",
-                        url: "https://apps.apple.com/us/app/shadowrocket/id932747118",
-                        category: "小火箭",
-                        id: "DEV006"
-                    },
-                    {
-                        name: "YouTube",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png",
-                        description: "全球最大的视频分享平台",
-                        url: "https://www.youtube.com/",
-                        category: "油管",
-                        id: "DEV007"
-                    },
-                    {
-                        name: "Gmail",
-                        avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png",
-                        description: "Google的免费网络邮件服务",
-                        url: "https://workspace.google.com/intl/zh-CN/gmail/",
-                        category: "谷歌邮箱",
-                        id: "DEV008"
-                    },
-                    {
-                        name: "Google",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png",
-                        description: "最强大的搜索引擎",
-                        url: "https://www.google.cn/",
-                        category: "谷歌",
-                        id: "DEV009"
-                    },
-                    {
-                        name: "Instagram",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png",
-                        description: "国外人都在用的小红书",
-                        url: "https://www.instagram.com/",
-                        category: "ig·ins",
-                        id: "DEV010"
-                    },
-                    {
-                        name: "TikTok",
-                        avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp",
-                        description: "国外人都在用的抖音",
-                        url: "https://www.tiktok.com/",
-                        category: "抖音",
-                        id: "DEV011"
-                    },
-                    {
-                        name: "Facebook",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png",
-                        description: "全球最大的社交网络服务平台",
-                        url: "https://www.facebook.com/",
-                        category: "脸书",
-                        id: "DEV012"
-                    },
-                    {
-                        name: "WhatsApp",
-                        avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png",
-                        description: "跨平台即时通讯应用程序",
-                        url: "https://www.whatsapp.com/",
-                        category: "WhatsApp",
-                        id: "DEV013"
-                    }
+                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
+                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "购买请联系我", url: "https://tool.gljlw.com/qq/?qq=1226407713", category: "在线中", id: "DEV002" },
+                    { name: "Tg客服", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "来找我聊天吹水~", url: "https://t.me/dianbaodashen1", category: "在线中", id: "DEV003" },
+                    { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
+                    { name: "X", avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png", description: "国外人都在用的微博", url: "https://x.com/", category: "推特", id: "DEV005" },
+                    { name: "Shadowrocket", avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp", description: "IOS端最好用的加速器", url: "https://apps.apple.com/us/app/shadowrocket/id932747118", category: "小火箭", id: "DEV006" },
+                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" },
+                    { name: "Gmail", avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png", description: "Google的免费网络邮件服务", url: "https://workspace.google.com/intl/zh-CN/gmail/", category: "谷歌邮箱", id: "DEV008" },
+                    { name: "Google", avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png", description: "最强大的搜索引擎", url: "https://www.google.cn/", category: "谷歌", id: "DEV009" },
+                    { name: "Instagram", avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png", description: "国外人都在用的小红书", url: "https://www.instagram.com/", category: "ig·ins", id: "DEV010" },
+                    { name: "TikTok", avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp", description: "国外人都在用的抖音", url: "https://www.tiktok.com/", category: "抖音", id: "DEV011" },
+                    { name: "Facebook", avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png", description: "全球最大的社交网络服务平台", url: "https://www.facebook.com/", category: "脸书", id: "DEV012" },
+                    { name: "WhatsApp", avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png", description: "跨平台即时通讯应用程序", url: "https://www.whatsapp.com/", category: "WhatsApp", id: "DEV013" }
                 ]
             }
         ];
@@ -242,36 +195,25 @@
                 const navData = ref(JSON.parse(JSON.stringify(fullData)));
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
+                const showPushModalFlag = ref(false);
+                const githubToken = ref('');
+                const repoName = ref('857d/RyuChan');
+                const filePath = ref('src/config/navData.ts');
+                const commitMsg = ref('chore: update navigation data');
+                const pushing = ref(false);
 
                 const addCategory = () => {
-                    navData.value.push({
-                        title: "新分类",
-                        icon: "lucide:folder",
-                        items: []
-                    });
+                    navData.value.push({ title: "新分类", icon: "lucide:folder", items: [] });
                 };
-
                 const removeCategory = (index) => {
-                    if (confirm(`确定删除分类“${navData.value[index].title}”吗？`)) {
-                        navData.value.splice(index, 1);
-                    }
+                    if (confirm(`确定删除分类“${navData.value[index].title}”吗？`)) navData.value.splice(index, 1);
                 };
-
                 const addItem = (catIndex) => {
-                    navData.value[catIndex].items.push({
-                        name: "新项目",
-                        avatar: "",
-                        description: "",
-                        url: "",
-                        category: "",
-                        id: `ITEM${Date.now()}`
-                    });
+                    navData.value[catIndex].items.push({ name: "新项目", avatar: "", description: "", url: "", category: "", id: `ITEM${Date.now()}` });
                 };
-
                 const removeItem = (catIndex, itemIndex) => {
                     navData.value[catIndex].items.splice(itemIndex, 1);
                 };
-
                 const exportData = () => {
                     const dataStr = JSON.stringify(navData.value, null, 2);
                     const blob = new Blob([dataStr], {type: "application/json"});
@@ -282,7 +224,6 @@
                     a.click();
                     URL.revokeObjectURL(url);
                 };
-
                 const importData = (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -290,42 +231,84 @@
                     reader.onload = (e) => {
                         try {
                             const data = JSON.parse(e.target.result);
-                            if (Array.isArray(data)) {
-                                navData.value = data;
-                                alert('导入成功');
-                            } else {
-                                alert('无效的数据格式');
-                            }
-                        } catch (err) {
-                            alert('解析失败：' + err.message);
-                        }
+                            if (Array.isArray(data)) navData.value = data;
+                            else alert('无效的数据格式');
+                        } catch (err) { alert('解析失败：' + err.message); }
                     };
                     reader.readAsText(file);
                 };
-
                 const generateCode = () => {
                     const code = `import type { NavItem, NavCategory } from './types'; // 请根据实际路径调整\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};`;
                     generatedCode.value = code;
                     showCodeModal.value = true;
                 };
-
                 const copyCode = () => {
                     navigator.clipboard.writeText(generatedCode.value);
                     alert('代码已复制到剪贴板');
                 };
+                const showPushModal = () => {
+                    showPushModalFlag.value = true;
+                };
+                const pushToGitHub = async () => {
+                    if (!githubToken.value) { alert('请输入 GitHub Token'); return; }
+                    if (!repoName.value) { alert('请输入仓库名'); return; }
+                    if (!filePath.value) { alert('请输入文件路径'); return; }
+
+                    pushing.value = true;
+                    try {
+                        // 生成文件内容
+                        const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
+                        const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
+
+                        // 获取当前文件的 SHA（用于更新）
+                        const getUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
+                        let sha = null;
+                        try {
+                            const getRes = await fetch(getUrl, { headers: { Authorization: `token ${githubToken.value}` } });
+                            if (getRes.ok) {
+                                const data = await getRes.json();
+                                sha = data.sha;
+                            } else if (getRes.status !== 404) {
+                                throw new Error('获取文件信息失败');
+                            }
+                        } catch (err) { console.warn('文件不存在，将创建新文件'); }
+
+                        // 提交更新
+                        const putUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
+                        const putBody = {
+                            message: commitMsg.value,
+                            content: encodedContent,
+                            branch: 'main'
+                        };
+                        if (sha) putBody.sha = sha;
+
+                        const putRes = await fetch(putUrl, {
+                            method: 'PUT',
+                            headers: {
+                                Authorization: `token ${githubToken.value}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(putBody)
+                        });
+                        if (putRes.ok) {
+                            alert('✅ 推送成功！博客项目将自动重新部署。');
+                            showPushModalFlag.value = false;
+                        } else {
+                            const err = await putRes.json();
+                            alert('推送失败：' + (err.message || '未知错误'));
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        alert('推送失败：' + err.message);
+                    } finally {
+                        pushing.value = false;
+                    }
+                };
 
                 return {
-                    navData,
-                    showCodeModal,
-                    generatedCode,
-                    addCategory,
-                    removeCategory,
-                    addItem,
-                    removeItem,
-                    exportData,
-                    importData,
-                    generateCode,
-                    copyCode
+                    navData, showCodeModal, generatedCode, showPushModalFlag, githubToken, repoName, filePath, commitMsg, pushing,
+                    addCategory, removeCategory, addItem, removeItem, exportData, importData, generateCode, copyCode,
+                    showPushModal, pushToGitHub
                 };
             }
         }).mount('#app');
