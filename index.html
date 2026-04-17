@@ -123,8 +123,8 @@
     <script>
         const { createApp, ref } = Vue;
 
-        // 默认示例数据（基于您提供的部分）
-        const defaultData = [
+        // 完整导航数据（包含所有项目）
+        const fullData = [
             {
                 title: "软件",
                 icon: "lucide:code",
@@ -144,6 +144,94 @@
                         url: "https://tool.gljlw.com/qq/?qq=1226407713",
                         category: "在线中",
                         id: "DEV002"
+                    },
+                    {
+                        name: "Tg客服",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png",
+                        description: "来找我聊天吹水~",
+                        url: "https://t.me/dianbaodashen1",
+                        category: "在线中",
+                        id: "DEV003"
+                    },
+                    {
+                        name: "Telegram",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png",
+                        description: "跨平台的即时通讯软件",
+                        url: "https://telegram.org/",
+                        category: "纸飞机",
+                        id: "DEV004"
+                    },
+                    {
+                        name: "X",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png",
+                        description: "国外人都在用的微博",
+                        url: "https://x.com/",
+                        category: "推特",
+                        id: "DEV005"
+                    },
+                    {
+                        name: "Shadowrocket",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp",
+                        description: "IOS端最好用的加速器",
+                        url: "https://apps.apple.com/us/app/shadowrocket/id932747118",
+                        category: "小火箭",
+                        id: "DEV006"
+                    },
+                    {
+                        name: "YouTube",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png",
+                        description: "全球最大的视频分享平台",
+                        url: "https://www.youtube.com/",
+                        category: "油管",
+                        id: "DEV007"
+                    },
+                    {
+                        name: "Gmail",
+                        avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png",
+                        description: "Google的免费网络邮件服务",
+                        url: "https://workspace.google.com/intl/zh-CN/gmail/",
+                        category: "谷歌邮箱",
+                        id: "DEV008"
+                    },
+                    {
+                        name: "Google",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png",
+                        description: "最强大的搜索引擎",
+                        url: "https://www.google.cn/",
+                        category: "谷歌",
+                        id: "DEV009"
+                    },
+                    {
+                        name: "Instagram",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png",
+                        description: "国外人都在用的小红书",
+                        url: "https://www.instagram.com/",
+                        category: "ig·ins",
+                        id: "DEV010"
+                    },
+                    {
+                        name: "TikTok",
+                        avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp",
+                        description: "国外人都在用的抖音",
+                        url: "https://www.tiktok.com/",
+                        category: "抖音",
+                        id: "DEV011"
+                    },
+                    {
+                        name: "Facebook",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png",
+                        description: "全球最大的社交网络服务平台",
+                        url: "https://www.facebook.com/",
+                        category: "脸书",
+                        id: "DEV012"
+                    },
+                    {
+                        name: "WhatsApp",
+                        avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png",
+                        description: "跨平台即时通讯应用程序",
+                        url: "https://www.whatsapp.com/",
+                        category: "WhatsApp",
+                        id: "DEV013"
                     }
                 ]
             }
@@ -151,11 +239,10 @@
 
         createApp({
             setup() {
-                const navData = ref(JSON.parse(JSON.stringify(defaultData)));
+                const navData = ref(JSON.parse(JSON.stringify(fullData)));
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
 
-                // 添加分类
                 const addCategory = () => {
                     navData.value.push({
                         title: "新分类",
@@ -164,14 +251,12 @@
                     });
                 };
 
-                // 删除分类
                 const removeCategory = (index) => {
                     if (confirm(`确定删除分类“${navData.value[index].title}”吗？`)) {
                         navData.value.splice(index, 1);
                     }
                 };
 
-                // 添加项目
                 const addItem = (catIndex) => {
                     navData.value[catIndex].items.push({
                         name: "新项目",
@@ -183,12 +268,10 @@
                     });
                 };
 
-                // 删除项目
                 const removeItem = (catIndex, itemIndex) => {
                     navData.value[catIndex].items.splice(itemIndex, 1);
                 };
 
-                // 导出 JSON
                 const exportData = () => {
                     const dataStr = JSON.stringify(navData.value, null, 2);
                     const blob = new Blob([dataStr], {type: "application/json"});
@@ -200,7 +283,6 @@
                     URL.revokeObjectURL(url);
                 };
 
-                // 导入 JSON
                 const importData = (event) => {
                     const file = event.target.files[0];
                     if (!file) return;
@@ -221,14 +303,12 @@
                     reader.readAsText(file);
                 };
 
-                // 生成 TypeScript 代码
                 const generateCode = () => {
                     const code = `import type { NavItem, NavCategory } from './types'; // 请根据实际路径调整\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};`;
                     generatedCode.value = code;
                     showCodeModal.value = true;
                 };
 
-                // 复制代码
                 const copyCode = () => {
                     navigator.clipboard.writeText(generatedCode.value);
                     alert('代码已复制到剪贴板');
