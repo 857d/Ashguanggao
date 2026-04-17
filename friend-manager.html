@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>友链数据管理器 - 支持图片预览</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        .avatar-preview { width: 48px; height: 48px; object-fit: cover; border-radius: 50%; background: #f3f4f6; }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+        .table-container { overflow-x: auto; }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 md:p-6">
+    <div id="app" class="max-w-7xl mx-auto">
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <!-- 头部 -->
+            <div class="bg-gradient-to-r from-pink-600 to-rose-700 px-6 py-5">
+                <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-handshake"></i> 友链数据管理器
+                </h1>
+                <p class="text-pink-100 text-sm mt-1">管理 Friends 和 Sites 数据，支持图片预览，一键生成代码</p>
+            </div>
+
+            <!-- 工具栏 -->
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-3 justify-between items-center">
+                <div class="flex gap-2 flex-wrap">
+                    <button @click="activeTab = 'friends'" :class="{'bg-pink-600 text-white': activeTab === 'friends', 'bg-gray-200': activeTab !== 'friends'}" class="px-4 py-2 rounded-lg text-sm font-medium transition">Friends 管理</button>
+                    <button @click="activeTab = 'sites'" :class="{'bg-pink-600 text-white': activeTab === 'sites', 'bg-gray-200': activeTab !== 'sites'}" class="px-4 py-2 rounded-lg text-sm font-medium transition">Sites 管理</button>
+                </div>
+                <div class="flex gap-2">
+                    <button @click="addItem" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> 添加</button>
+                    <button @click="exportData" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-download"></i> 导出 JSON</button>
+                    <label class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 cursor-pointer">
+                        <i class="fas fa-upload"></i> 导入 JSON
+                        <input type="file" @change="importData" accept=".json" class="hidden">
+                    </label>
+                    <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
+                </div>
+            </div>
+
+            <!-- Friends 表格 -->
+            <div v-show="activeTab === 'friends'" class="p-4">
+                <div class="table-container">
+                    <table class="min-w-[900px] w-full text-sm border-collapse">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-3 py-2 w-8"></th>
+                                <th class="px-3 py-2 text-left">头像</th>
+                                <th class="px-3 py-2 text-left">名称</th>
+                                <th class="px-3 py-2 text-left">描述</th>
+                                <th class="px-3 py-2 text-left">链接</th>
+                                <th class="px-3 py-2 text-left">徽章</th>
+                                <th class="px-3 py-2 w-16">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, idx) in friends" :key="idx" class="border-b hover:bg-gray-50">
+                                <td class="px-3 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-400"></i></td>
+                                <td class="px-3 py-2">
+                                    <div class="flex items-center gap-2">
+                                        <img :src="item.avatar" class="avatar-preview" @error="item.avatar = 'https://via.placeholder.com/48?text=No+Image'">
+                                        <input v-model="item.avatar" class="w-40 border rounded px-1 py-1 text-xs" placeholder="图片URL">
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2"><input v-model="item.name" class="w-32 border rounded px-2 py-1"></td>
+                                <td class="px-3 py-2"><input v-model="item.description" class="w-48 border rounded px-2 py-1"></td>
+                                <td class="px-3 py-2"><input v-model="item.url" class="w-56 border rounded px-2 py-1 text-xs"></td>
+                                <td class="px-3 py-2"><input v-model="item.badge" class="w-24 border rounded px-2 py-1" placeholder="可选"></td>
+                                <td class="px-3 py-2"><button @click="removeFriend(idx)" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Sites 表格 -->
+            <div v-show="activeTab === 'sites'" class="p-4">
+                <div class="table-container">
+                    <table class="min-w-[500px] w-full text-sm border-collapse">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-3 py-2 w-8"></th>
+                                <th class="px-3 py-2 text-left">名称</th>
+                                <th class="px-3 py-2 text-left">链接</th>
+                                <th class="px-3 py-2 w-16">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(item, idx) in sites" :key="idx" class="border-b hover:bg-gray-50">
+                                <td class="px-3 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-400"></i></td>
+                                <td class="px-3 py-2"><input v-model="item.name" class="w-48 border rounded px-2 py-1"></td>
+                                <td class="px-3 py-2"><input v-model="item.url" class="w-64 border rounded px-2 py-1 text-xs"></td>
+                                <td class="px-3 py-2"><button @click="removeSite(idx)" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-if="(activeTab === 'friends' && friends.length === 0) || (activeTab === 'sites' && sites.length === 0)" class="p-8 text-center text-gray-400">
+                <i class="fas fa-inbox text-4xl mb-2"></i>
+                <p>暂无数据，点击“添加”按钮创建</p>
+            </div>
+        </div>
+
+        <!-- 生成代码模态框 -->
+        <div v-if="showCodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showCodeModal=false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="text-lg font-semibold">Astro 数据代码（替换 friend.astro 中对应部分）</h3>
+                    <button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="flex-1 overflow-auto p-4">
+                    <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto"><code>{{ generatedCode }}</code></pre>
+                </div>
+                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl">
+                    <button @click="copyCode" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">复制代码</button>
+                    <button @click="showCodeModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        // 默认数据（基于您提供的 friend.astro）
+        const defaultFriends = [
+            { name: "开盒", avatar: "https://picbed.xiaozhangya.xin/picbed/20250726181930154.png", description: "人间四月芳菲尽！", url: "https://t.me/Ash662", badge: "认证" },
+            { name: "代开会员", avatar: "https://picbed.xiaozhangya.xin/picbed/20250726181930154.png", description: "代开三个月起，六个月价格优惠！", url: "https://t.me/Ash662", badge: "认证" },
+            { name: "代找资源", avatar: "https://picbed.xiaozhangya.xin/picbed/20250726181930154.png", description: "Creazing a better world with code.", url: "https://t.me/Ash662", badge: "认证" }
+        ];
+        const defaultSites = [
+            { name: "在线中", url: "https://t.me/Ash662" }
+        ];
+
+        createApp({
+            setup() {
+                const activeTab = ref('friends');
+                const friends = ref(JSON.parse(JSON.stringify(defaultFriends)));
+                const sites = ref(JSON.parse(JSON.stringify(defaultSites)));
+                const showCodeModal = ref(false);
+                const generatedCode = ref('');
+
+                const addItem = () => {
+                    if (activeTab.value === 'friends') {
+                        friends.value.push({ name: "新朋友", avatar: "", description: "", url: "", badge: "" });
+                    } else {
+                        sites.value.push({ name: "新站点", url: "" });
+                    }
+                };
+                const removeFriend = (idx) => { if (confirm('确定删除？')) friends.value.splice(idx, 1); };
+                const removeSite = (idx) => { if (confirm('确定删除？')) sites.value.splice(idx, 1); };
+                const exportData = () => {
+                    const exportObj = { friends: friends.value, sites: sites.value };
+                    const dataStr = JSON.stringify(exportObj, null, 2);
+                    const blob = new Blob([dataStr], {type: "application/json"});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'friend-data.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+                const importData = (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (data.friends && Array.isArray(data.friends)) friends.value = data.friends;
+                            if (data.sites && Array.isArray(data.sites)) sites.value = data.sites;
+                            alert('导入成功');
+                        } catch (err) { alert('解析失败：' + err.message); }
+                    };
+                    reader.readAsText(file);
+                };
+                const generateCode = () => {
+                    const friendsCode = `const friends = ${JSON.stringify(friends.value, null, 2)};`;
+                    const sitesCode = `const sites = ${JSON.stringify(sites.value, null, 2)};`;
+                    generatedCode.value = `${friendsCode}\n\n${sitesCode}`;
+                    showCodeModal.value = true;
+                };
+                const copyCode = () => {
+                    navigator.clipboard.writeText(generatedCode.value);
+                    alert('代码已复制到剪贴板');
+                };
+                return {
+                    activeTab, friends, sites, showCodeModal, generatedCode,
+                    addItem, removeFriend, removeSite, exportData, importData, generateCode, copyCode
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
