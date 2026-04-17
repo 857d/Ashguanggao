@@ -3,109 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航数据管理器 - 自动推送至 GitHub</title>
+    <title>导航数据管理器 - 完整版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
-        .card-hover:hover { transform: translateY(-2px); transition: all 0.2s ease; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
+        .card-hover:hover { transform: translateY(-2px); transition: all 0.2s ease; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .btn-icon { transition: all 0.2s; }
     </style>
 </head>
-<body class="bg-gray-100 p-6">
+<body class="bg-gray-100 p-4 md:p-6">
     <div id="app" class="max-w-7xl mx-auto">
-        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
-            <div class="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4">
-                <h1 class="text-2xl font-bold text-white">导航数据管理器</h1>
-                <p class="text-blue-100 text-sm">管理 NAV_DATA 并自动推送到 GitHub 仓库</p>
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+            <!-- 头部 -->
+            <div class="bg-gradient-to-r from-blue-700 to-indigo-800 px-6 py-5">
+                <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
+                    <i class="fas fa-compass"></i> 导航数据管理器
+                </h1>
+                <p class="text-blue-100 text-sm mt-1">管理 NAV_DATA，一键生成代码或推送到 GitHub 仓库</p>
             </div>
 
             <!-- 工具栏 -->
-            <div class="p-4 border-b flex flex-wrap gap-3 justify-between items-center bg-gray-50">
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-3 justify-between items-center">
                 <div class="flex gap-2 flex-wrap">
-                    <button @click="addCategory" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                        <i class="fas fa-plus"></i> 添加分类
-                    </button>
-                    <button @click="exportData" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                        <i class="fas fa-download"></i> 导出 JSON
-                    </button>
-                    <label class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 cursor-pointer">
+                    <button @click="addCategory" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> 添加分类</button>
+                    <button @click="exportData" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-download"></i> 导出 JSON</button>
+                    <label class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 cursor-pointer">
                         <i class="fas fa-upload"></i> 导入 JSON
                         <input type="file" @change="importData" accept=".json" class="hidden">
                     </label>
                 </div>
                 <div class="flex gap-2">
-                    <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                        <i class="fas fa-code"></i> 生成代码
-                    </button>
-                    <button @click="showPushModal" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                        <i class="fab fa-github"></i> 推送到 GitHub
-                    </button>
+                    <button @click="showCodeModal = true" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
+                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 推送到 GitHub</button>
                 </div>
             </div>
 
-            <!-- 分类列表（省略，同之前） -->
-            <div class="p-4 space-y-6">
-                <div v-for="(category, catIndex) in navData" :key="catIndex" class="border rounded-lg overflow-hidden bg-white shadow-sm">
-                    <div class="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-                        <div class="flex items-center gap-3">
-                            <i class="drag-handle fas fa-grip-vertical text-gray-400 cursor-move"></i>
-                            <input v-model="category.title" class="font-bold text-lg border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 w-48" placeholder="分类标题">
-                            <input v-model="category.icon" class="text-sm border rounded px-2 py-1 w-32" placeholder="图标 (如 lucide:code)">
+            <!-- 分类列表 -->
+            <div class="p-4 space-y-6 max-h-[70vh] overflow-y-auto">
+                <div v-for="(cat, catIdx) in navData" :key="catIdx" class="border rounded-xl overflow-hidden bg-white shadow-sm">
+                    <div class="bg-gray-50 px-4 py-3 border-b flex flex-wrap justify-between items-center gap-2">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <i class="drag-handle fas fa-grip-vertical text-gray-400"></i>
+                            <input v-model="cat.title" class="font-bold text-lg border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 w-40" placeholder="分类标题">
+                            <input v-model="cat.icon" class="text-sm border rounded px-2 py-1 w-36" placeholder="图标 (如 lucide:code)">
                         </div>
                         <div class="flex gap-2">
-                            <button @click="addItem(catIndex)" class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-plus"></i> 添加项目</button>
-                            <button @click="removeCategory(catIndex)" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i> 删除分类</button>
+                            <button @click="addItem(catIdx)" class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-plus"></i> 添加项目</button>
+                            <button @click="removeCategory(catIdx)" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i> 删除分类</button>
                         </div>
                     </div>
-                    <div class="p-3">
-                        <table class="min-w-full text-sm">
+                    <div class="p-3 overflow-x-auto">
+                        <table class="min-w-[800px] w-full text-sm">
                             <thead class="bg-gray-100">
-                                <tr><th class="px-2 py-2 text-left w-8"></th><th class="px-2 py-2 text-left">名称</th><th class="px-2 py-2 text-left">头像URL</th><th class="px-2 py-2 text-left">描述</th><th class="px-2 py-2 text-left">链接</th><th class="px-2 py-2 text-left">分类标签</th><th class="px-2 py-2 text-left">ID</th><th class="px-2 py-2 text-left w-20">操作</th></tr>
+                                <tr><th class="px-2 py-2 w-8"></th><th class="px-2 py-2 text-left">名称</th><th class="px-2 py-2 text-left">头像URL</th><th class="px-2 py-2 text-left">描述</th><th class="px-2 py-2 text-left">链接</th><th class="px-2 py-2 text-left">分类标签</th><th class="px-2 py-2 text-left">ID</th><th class="px-2 py-2 w-16">操作</th></tr>
                             </thead>
                             <tbody>
-                                <tr v-for="(item, itemIndex) in category.items" :key="itemIndex" class="border-b hover:bg-gray-50">
-                                    <td class="px-2 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-300 cursor-move"></i></td>
+                                <tr v-for="(item, itemIdx) in cat.items" :key="itemIdx" class="border-b hover:bg-gray-50">
+                                    <td class="px-2 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-300"></i></td>
                                     <td class="px-2 py-2"><input v-model="item.name" class="w-32 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.avatar" class="w-40 border rounded px-1 py-1 text-xs"></td>
+                                    <td class="px-2 py-2"><input v-model="item.avatar" class="w-48 border rounded px-1 py-1 text-xs"></td>
                                     <td class="px-2 py-2"><input v-model="item.description" class="w-40 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.url" class="w-48 border rounded px-1 py-1 text-xs"></td>
+                                    <td class="px-2 py-2"><input v-model="item.url" class="w-56 border rounded px-1 py-1 text-xs"></td>
                                     <td class="px-2 py-2"><input v-model="item.category" class="w-24 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.id" class="w-24 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><button @click="removeItem(catIndex, itemIndex)" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button></td>
+                                    <td class="px-2 py-2"><input v-model="item.id" class="w-28 border rounded px-1 py-1"></td>
+                                    <td class="px-2 py-2"><button @click="removeItem(catIdx, itemIdx)" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
+                <div v-if="navData.length === 0" class="text-center text-gray-400 py-12"><i class="fas fa-folder-open text-4xl mb-2"></i><p>暂无分类，点击“添加分类”开始</p></div>
             </div>
-
-            <div v-if="navData.length === 0" class="p-8 text-center text-gray-400"><i class="fas fa-folder-open text-4xl mb-2"></i><p>暂无分类，点击“添加分类”开始</p></div>
         </div>
 
-        <!-- 代码生成模态框 -->
+        <!-- 生成代码模态框 -->
         <div v-if="showCodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showCodeModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">生成的 TypeScript 代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">TypeScript 代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="flex-1 overflow-auto p-4"><pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto"><code>{{ generatedCode }}</code></pre></div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="copyCode" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">复制代码</button><button @click="showCodeModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">关闭</button></div>
             </div>
         </div>
 
-        <!-- 推送配置模态框（增加“记住Token”复选框） -->
-        <div v-if="showPushModalFlag" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModalFlag=false">
+        <!-- 推送配置模态框（带记住Token） -->
+        <div v-if="showPushModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">推送到 GitHub 仓库</h3><button @click="showPushModalFlag=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">推送到 GitHub 仓库</h3><button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="p-6 space-y-4">
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"><p class="text-xs text-gray-500 mt-1">需要 <code>repo</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" class="text-blue-600">点击创建 Token</a></p></div>
-                    <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm text-gray-600">记住 Token（保存在本机浏览器，下次自动填写）</span></label></div>
+                    <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm text-gray-600">记住 Token（保存在本机，下次自动填写）</span></label></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/config/navData.ts"></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">提交信息 (commit message)</label><input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update navigation data"></div>
-                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改您的仓库文件，请谨慎操作。建议先备份。</div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">提交信息</label><input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update navigation data"></div>
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改您的仓库文件，请谨慎操作。建议先导出 JSON 备份。</div>
                 </div>
-                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModalFlag=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="pushToGitHub" :disabled="pushing" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"><i v-if="pushing" class="fas fa-spinner fa-spin"></i>{{ pushing ? '推送中...' : '确认推送' }}</button></div>
+                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="pushToGitHub" :disabled="pushing" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"><i v-if="pushing" class="fas fa-spinner fa-spin"></i>{{ pushing ? '推送中...' : '确认推送' }}</button></div>
             </div>
         </div>
     </div>
@@ -113,15 +108,36 @@
     <script>
         const { createApp, ref } = Vue;
 
-        // 完整导航数据（与之前相同，此处省略长列表，实际请保留完整数据）
-        const fullData = [ /* ... 请从之前的代码中复制完整的 fullData 数组 ... */ ];
+        // 完整默认数据（包含你提供的所有条目）
+        const defaultNavData = [
+            {
+                title: "软件",
+                icon: "lucide:code",
+                items: [
+                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
+                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "购买请联系我", url: "https://tool.gljlw.com/qq/?qq=1226407713", category: "在线中", id: "DEV002" },
+                    { name: "Tg客服", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "来找我聊天吹水~", url: "https://t.me/dianbaodashen1", category: "在线中", id: "DEV003" },
+                    { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
+                    { name: "X", avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png", description: "国外人都在用的微博", url: "https://x.com/", category: "推特", id: "DEV005" },
+                    { name: "Shadowrocket", avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp", description: "IOS端最好用的加速器", url: "https://apps.apple.com/us/app/shadowrocket/id932747118", category: "小火箭", id: "DEV006" },
+                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" },
+                    { name: "Gmail", avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png", description: "Google的免费网络邮件服务", url: "https://workspace.google.com/intl/zh-CN/gmail/", category: "谷歌邮箱", id: "DEV008" },
+                    { name: "Google", avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png", description: "最强大的搜索引擎", url: "https://www.google.cn/", category: "谷歌", id: "DEV009" },
+                    { name: "Instagram", avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png", description: "国外人都在用的小红书", url: "https://www.instagram.com/", category: "ig·ins", id: "DEV010" },
+                    { name: "TikTok", avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp", description: "国外人都在用的抖音", url: "https://www.tiktok.com/", category: "抖音", id: "DEV011" },
+                    { name: "Facebook", avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png", description: "全球最大的社交网络服务平台", url: "https://www.facebook.com/", category: "脸书", id: "DEV012" },
+                    { name: "WhatsApp", avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png", description: "跨平台即时通讯应用程序", url: "https://www.whatsapp.com/", category: "WhatsApp", id: "DEV013" }
+                ]
+            }
+        ];
 
         createApp({
             setup() {
-                const navData = ref(JSON.parse(JSON.stringify(fullData)));
+                // 数据
+                const navData = ref(JSON.parse(JSON.stringify(defaultNavData)));
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
-                const showPushModalFlag = ref(false);
+                const showPushModal = ref(false);
                 const githubToken = ref('');
                 const saveToken = ref(false);
                 const repoName = ref('857d/RyuChan');
@@ -129,21 +145,27 @@
                 const commitMsg = ref('chore: update navigation data');
                 const pushing = ref(false);
 
-                // 页面加载时读取本地存储的 Token
+                // 加载本地存储的 Token
                 const storedToken = localStorage.getItem('github_token');
                 if (storedToken) {
                     githubToken.value = storedToken;
                     saveToken.value = true;
                 }
 
-                // 添加分类、删除分类等方法（省略，与之前相同，请保留原有实现）
-                // ... 为了节省篇幅，此处省略，实际使用时请从之前的完整代码中复制所有方法
+                // 辅助方法
+                const addCategory = () => navData.value.push({ title: "新分类", icon: "lucide:folder", items: [] });
+                const removeCategory = (idx) => { if (confirm(`删除分类“${navData.value[idx].title}”?`)) navData.value.splice(idx, 1); };
+                const addItem = (catIdx) => navData.value[catIdx].items.push({ name: "新项目", avatar: "", description: "", url: "", category: "", id: `ITEM${Date.now()}` });
+                const removeItem = (catIdx, itemIdx) => navData.value[catIdx].items.splice(itemIdx, 1);
+                const exportData = () => { const dataStr = JSON.stringify(navData.value, null, 2); const blob = new Blob([dataStr], {type: "application/json"}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'navData.json'; a.click(); URL.revokeObjectURL(url); };
+                const importData = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const data = JSON.parse(e.target.result); if (Array.isArray(data)) navData.value = data; else alert('无效格式'); } catch (err) { alert('解析失败'); } }; reader.readAsText(file); };
+                const generateCode = () => { const code = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};`; generatedCode.value = code; showCodeModal.value = true; };
+                const copyCode = () => { navigator.clipboard.writeText(generatedCode.value); alert('代码已复制'); };
 
                 const pushToGitHub = async () => {
                     if (!githubToken.value) { alert('请输入 GitHub Token'); return; }
                     if (!repoName.value) { alert('请输入仓库名'); return; }
                     if (!filePath.value) { alert('请输入文件路径'); return; }
-
                     pushing.value = true;
                     try {
                         const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
@@ -154,42 +176,31 @@
                         try {
                             const getRes = await fetch(getUrl, { headers: { Authorization: `token ${githubToken.value}` } });
                             if (getRes.ok) { const data = await getRes.json(); sha = data.sha; }
-                        } catch (err) { console.warn('文件不存在，将创建新文件'); }
+                        } catch (err) { /* 文件不存在，将创建 */ }
 
-                        const putUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
                         const putBody = { message: commitMsg.value, content: encodedContent, branch: 'main' };
                         if (sha) putBody.sha = sha;
-
-                        const putRes = await fetch(putUrl, {
+                        const putRes = await fetch(`https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`, {
                             method: 'PUT',
                             headers: { Authorization: `token ${githubToken.value}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify(putBody)
                         });
                         if (putRes.ok) {
-                            // 推送成功后，如果勾选了“记住Token”，则保存到 localStorage
-                            if (saveToken.value) {
-                                localStorage.setItem('github_token', githubToken.value);
-                            } else {
-                                localStorage.removeItem('github_token');
-                            }
-                            alert('✅ 推送成功！博客项目将自动重新部署。');
-                            showPushModalFlag.value = false;
+                            if (saveToken.value) localStorage.setItem('github_token', githubToken.value);
+                            else localStorage.removeItem('github_token');
+                            alert('✅ 推送成功！博客将自动重新部署。');
+                            showPushModal.value = false;
                         } else {
                             const err = await putRes.json();
                             alert('推送失败：' + (err.message || '未知错误'));
                         }
-                    } catch (err) {
-                        console.error(err);
-                        alert('推送失败：' + err.message);
-                    } finally {
-                        pushing.value = false;
-                    }
+                    } catch (err) { alert('推送失败：' + err.message); }
+                    finally { pushing.value = false; }
                 };
 
                 return {
-                    navData, showCodeModal, generatedCode, showPushModalFlag, githubToken, saveToken, repoName, filePath, commitMsg, pushing,
-                    addCategory, removeCategory, addItem, removeItem, exportData, importData, generateCode, copyCode,
-                    showPushModal, pushToGitHub
+                    navData, showCodeModal, generatedCode, showPushModal, githubToken, saveToken, repoName, filePath, commitMsg, pushing,
+                    addCategory, removeCategory, addItem, removeItem, exportData, importData, generateCode, copyCode, pushToGitHub
                 };
             }
         }).mount('#app');
