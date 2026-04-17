@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>友链数据管理器 - 支持图片预览</title>
+    <title>友链数据管理器 - 一键推送</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -22,7 +22,7 @@
                 <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
                     <i class="fas fa-handshake"></i> 友链数据管理器
                 </h1>
-                <p class="text-pink-100 text-sm mt-1">管理 Friends 和 Sites 数据，支持图片预览，一键生成代码</p>
+                <p class="text-pink-100 text-sm mt-1">管理 friends 和 sites 数据，支持图片预览，一键推送到 GitHub</p>
             </div>
 
             <!-- 工具栏 -->
@@ -39,6 +39,7 @@
                         <input type="file" @change="importData" accept=".json" class="hidden">
                     </label>
                     <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
+                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 推送到 GitHub</button>
                 </div>
             </div>
 
@@ -124,6 +125,28 @@
                 </div>
             </div>
         </div>
+
+        <!-- 推送配置模态框（与导航工具一致） -->
+        <div v-if="showPushModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModal=false">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                    <h3 class="text-lg font-semibold">推送到 GitHub 仓库</h3>
+                    <button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"><p class="text-xs text-gray-500 mt-1">需要 <code>repo</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" class="text-blue-600">点击创建 Token</a></p></div>
+                    <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm text-gray-600">记住 Token（保存在本机，下次自动填写）</span></label></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/pages/friend.astro"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">提交信息</label><input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update friends data"></div>
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改仓库中的 friend.astro 文件（替换 friends 和 sites 数据段）。请确保文件结构正确，建议先备份。</div>
+                </div>
+                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl">
+                    <button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button>
+                    <button @click="pushToGitHub" :disabled="pushing" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"><i v-if="pushing" class="fas fa-spinner fa-spin"></i>{{ pushing ? '推送中...' : '确认推送' }}</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -146,7 +169,22 @@
                 const sites = ref(JSON.parse(JSON.stringify(defaultSites)));
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
+                const showPushModal = ref(false);
+                const githubToken = ref('');
+                const saveToken = ref(false);
+                const repoName = ref('857d/RyuChan');
+                const filePath = ref('src/pages/friend.astro');
+                const commitMsg = ref('chore: update friends data');
+                const pushing = ref(false);
 
+                // 加载本地存储的 Token
+                const storedToken = localStorage.getItem('github_token_friend');
+                if (storedToken) {
+                    githubToken.value = storedToken;
+                    saveToken.value = true;
+                }
+
+                // 增删改查
                 const addItem = () => {
                     if (activeTab.value === 'friends') {
                         friends.value.push({ name: "新朋友", avatar: "", description: "", url: "", badge: "" });
@@ -191,9 +229,69 @@
                     navigator.clipboard.writeText(generatedCode.value);
                     alert('代码已复制到剪贴板');
                 };
+
+                // 推送到 GitHub（替换 friend.astro 中的 friends 和 sites 部分）
+                const pushToGitHub = async () => {
+                    if (!githubToken.value) { alert('请输入 GitHub Token'); return; }
+                    if (!repoName.value) { alert('请输入仓库名'); return; }
+                    if (!filePath.value) { alert('请输入文件路径'); return; }
+                    pushing.value = true;
+                    try {
+                        // 获取当前文件内容
+                        const getUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
+                        let sha = null;
+                        let originalContent = '';
+                        try {
+                            const getRes = await fetch(getUrl, { headers: { Authorization: `token ${githubToken.value}` } });
+                            if (getRes.ok) {
+                                const data = await getRes.json();
+                                sha = data.sha;
+                                originalContent = atob(data.content);
+                            } else if (getRes.status !== 404) {
+                                throw new Error('获取文件信息失败');
+                            }
+                        } catch (err) { console.warn('文件不存在，将创建新文件'); }
+
+                        // 构造新内容：替换 const friends = ... 和 const sites = ... 部分
+                        let newContent = originalContent;
+                        if (originalContent) {
+                            // 使用正则替换 friends 数组定义（注意缩进）
+                            const friendsRegex = /(const friends = )\[[\s\S]*?\];/;
+                            const newFriendsDecl = `const friends = ${JSON.stringify(friends.value, null, 2)};`;
+                            newContent = newContent.replace(friendsRegex, newFriendsDecl);
+                            const sitesRegex = /(const sites = )\[[\s\S]*?\];/;
+                            const newSitesDecl = `const sites = ${JSON.stringify(sites.value, null, 2)};`;
+                            newContent = newContent.replace(sitesRegex, newSitesDecl);
+                        } else {
+                            // 如果文件不存在，生成完整文件内容（简单模板）
+                            newContent = `---\nimport BaseLayout from "@/layouts/BaseLayout.astro";\nimport { Icon } from "astro-icon/components";\nimport FriendCard from "@/components/mdx/FriendCard.astro";\nimport Showcase from "@/components/mdx/Showcase.astro";\n\nconst friends = ${JSON.stringify(friends.value, null, 2)};\n\nconst sites = ${JSON.stringify(sites.value, null, 2)};\n---\n\n<BaseLayout title="Advertisement" isIndexed={false}>\n  <!-- 其余模板内容保持不变 -->\n  ...\n</BaseLayout>`;
+                        }
+
+                        const encodedContent = btoa(unescape(encodeURIComponent(newContent)));
+                        const putBody = { message: commitMsg.value, content: encodedContent, branch: 'main' };
+                        if (sha) putBody.sha = sha;
+                        const putRes = await fetch(`https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`, {
+                            method: 'PUT',
+                            headers: { Authorization: `token ${githubToken.value}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify(putBody)
+                        });
+                        if (putRes.ok) {
+                            if (saveToken.value) localStorage.setItem('github_token_friend', githubToken.value);
+                            else localStorage.removeItem('github_token_friend');
+                            alert('✅ 推送成功！博客将自动重新部署。');
+                            showPushModal.value = false;
+                        } else {
+                            const err = await putRes.json();
+                            alert('推送失败：' + (err.message || '未知错误'));
+                        }
+                    } catch (err) { alert('推送失败：' + err.message); }
+                    finally { pushing.value = false; }
+                };
+
                 return {
-                    activeTab, friends, sites, showCodeModal, generatedCode,
-                    addItem, removeFriend, removeSite, exportData, importData, generateCode, copyCode
+                    activeTab, friends, sites, showCodeModal, generatedCode, showPushModal,
+                    githubToken, saveToken, repoName, filePath, commitMsg, pushing,
+                    addItem, removeFriend, removeSite, exportData, importData, generateCode, copyCode, pushToGitHub
                 };
             }
         }).mount('#app');
