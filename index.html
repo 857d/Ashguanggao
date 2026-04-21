@@ -96,7 +96,7 @@
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"><p class="text-xs text-gray-500 mt-1">需要 <code>repo</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" class="text-blue-600">点击创建 Token</a></p></div>
                     <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm text-gray-600">记住 Token（保存在本机，下次自动填写）</span></label></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan"></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/config/navData.ts"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">提交信息</label><input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update navigation data"></div>
                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改您的仓库文件，请谨慎操作。建议先导出 JSON 备份。</div>
                 </div>
@@ -141,7 +141,7 @@
                 const githubToken = ref('');
                 const saveToken = ref(false);
                 const repoName = ref('857d/RyuChan');
-                const filePath = ref('src/config/navData.ts');
+                const filePath = ref('src/data/navData.ts');   // 修改为正确路径
                 const commitMsg = ref('chore: update navigation data');
                 const pushing = ref(false);
 
