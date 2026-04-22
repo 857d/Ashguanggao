@@ -3,29 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航数据管理器 - 完整版</title>
+    <title>导航数据管理器 - 自动同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
     <style>
         .drag-handle { cursor: grab; }
         .drag-handle:active { cursor: grabbing; }
-        .card-hover:hover { transform: translateY(-2px); transition: all 0.2s ease; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
-        .btn-icon { transition: all 0.2s; }
+        .dragging { opacity: 0.4 !important; background: #dbeafe !important; }
+        .drag-over { border-top: 3px solid #3b82f6 !important; background: #eff6ff !important; }
+        [draggable="true"] { user-select: none; }
+        .save-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+        .save-indicator.show { opacity: 1; }
+        .sync-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #f59e0b;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+        .sync-indicator.show { opacity: 1; }
+        .auto-sync-toggle {
+            background: #f3f4f6;
+            border-radius: 20px;
+            padding: 4px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body class="bg-gray-100 p-4 md:p-6">
     <div id="app" class="max-w-7xl mx-auto">
         <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <!-- 头部 -->
             <div class="bg-gradient-to-r from-blue-700 to-indigo-800 px-6 py-5">
                 <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
                     <i class="fas fa-compass"></i> 导航数据管理器
                 </h1>
-                <p class="text-blue-100 text-sm mt-1">管理 NAV_DATA，一键生成代码或推送到 GitHub 仓库</p>
+                <p class="text-blue-100 text-sm mt-1 flex items-center gap-3 flex-wrap">
+                    拖拽排序 | 数据自动保存
+                    <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">本地存储</span>
+                    <span v-if="autoSyncEnabled" class="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">自动同步 GitHub</span>
+                </p>
             </div>
 
-            <!-- 工具栏 -->
             <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-3 justify-between items-center">
                 <div class="flex gap-2 flex-wrap">
                     <button @click="addCategory" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> 添加分类</button>
@@ -34,21 +74,35 @@
                         <i class="fas fa-upload"></i> 导入 JSON
                         <input type="file" @change="importData" accept=".json" class="hidden">
                     </label>
+                    <button @click="resetToDefault" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-undo-alt"></i> 重置默认</button>
                 </div>
-                <div class="flex gap-2">
-                    <button @click="showCodeModal = true" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
-                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 推送到 GitHub</button>
+                <div class="flex gap-2 items-center">
+                    <div class="auto-sync-toggle">
+                        <i class="fab fa-github text-gray-600"></i>
+                        <span class="text-sm">自动同步</span>
+                        <input type="checkbox" v-model="autoSyncEnabled" @change="toggleAutoSync" class="rounded">
+                    </div>
+                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 手动推送</button>
+                    <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
                 </div>
             </div>
 
-            <!-- 分类列表 -->
-            <div class="p-4 space-y-6 max-h-[70vh] overflow-y-auto">
-                <div v-for="(cat, catIdx) in navData" :key="catIdx" class="border rounded-xl overflow-hidden bg-white shadow-sm">
+            <div class="p-4 space-y-6 max-h-[70vh] overflow-y-auto" id="categoriesContainer">
+                <div 
+                    v-for="(cat, catIdx) in navData" 
+                    :key="catIdx" 
+                    class="border rounded-xl overflow-hidden bg-white shadow-sm category-card"
+                    draggable="true"
+                    @dragstart="handleCategoryDragStart($event, catIdx)"
+                    @dragover="handleCategoryDragOver($event)"
+                    @dragend="handleCategoryDragEnd"
+                    @drop="handleCategoryDrop($event, catIdx)"
+                >
                     <div class="bg-gray-50 px-4 py-3 border-b flex flex-wrap justify-between items-center gap-2">
                         <div class="flex items-center gap-3 flex-wrap">
-                            <i class="drag-handle fas fa-grip-vertical text-gray-400"></i>
-                            <input v-model="cat.title" class="font-bold text-lg border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 w-40" placeholder="分类标题">
-                            <input v-model="cat.icon" class="text-sm border rounded px-2 py-1 w-36" placeholder="图标 (如 lucide:code)">
+                            <i class="drag-handle fas fa-grip-vertical text-gray-400 category-drag-handle"></i>
+                            <input v-model="cat.title" @input="onDataChange" class="font-bold text-lg border-0 bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-2 py-1 w-40" placeholder="分类标题">
+                            <input v-model="cat.icon" @input="onDataChange" class="text-sm border rounded px-2 py-1 w-36" placeholder="图标">
                         </div>
                         <div class="flex gap-2">
                             <button @click="addItem(catIdx)" class="text-green-600 hover:text-green-800 text-sm"><i class="fas fa-plus"></i> 添加项目</button>
@@ -60,147 +114,404 @@
                             <thead class="bg-gray-100">
                                 <tr><th class="px-2 py-2 w-8"></th><th class="px-2 py-2 text-left">名称</th><th class="px-2 py-2 text-left">头像URL</th><th class="px-2 py-2 text-left">描述</th><th class="px-2 py-2 text-left">链接</th><th class="px-2 py-2 text-left">分类标签</th><th class="px-2 py-2 text-left">ID</th><th class="px-2 py-2 w-16">操作</th></tr>
                             </thead>
-                            <tbody>
-                                <tr v-for="(item, itemIdx) in cat.items" :key="itemIdx" class="border-b hover:bg-gray-50">
-                                    <td class="px-2 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-300"></i></td>
-                                    <td class="px-2 py-2"><input v-model="item.name" class="w-32 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.avatar" class="w-48 border rounded px-1 py-1 text-xs"></td>
-                                    <td class="px-2 py-2"><input v-model="item.description" class="w-40 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.url" class="w-56 border rounded px-1 py-1 text-xs"></td>
-                                    <td class="px-2 py-2"><input v-model="item.category" class="w-24 border rounded px-1 py-1"></td>
-                                    <td class="px-2 py-2"><input v-model="item.id" class="w-28 border rounded px-1 py-1"></td>
+                            <tbody :data-category-index="catIdx">
+                                <tr 
+                                    v-for="(item, itemIdx) in cat.items" 
+                                    :key="itemIdx" 
+                                    class="border-b hover:bg-gray-50 item-row"
+                                    draggable="true"
+                                    @dragstart="handleItemDragStart($event, catIdx, itemIdx)"
+                                    @dragover="handleItemDragOver($event)"
+                                    @dragend="handleItemDragEnd"
+                                    @drop="handleItemDrop($event, catIdx, itemIdx)"
+                                >
+                                    <td class="px-2 py-2"><i class="drag-handle fas fa-grip-vertical text-gray-300 item-drag-handle"></i></td>
+                                    <td class="px-2 py-2"><input v-model="item.name" @input="onDataChange" class="w-32 border rounded px-1 py-1"></td>
+                                    <td class="px-2 py-2"><input v-model="item.avatar" @input="onDataChange" class="w-48 border rounded px-1 py-1 text-xs"></td>
+                                    <td class="px-2 py-2"><input v-model="item.description" @input="onDataChange" class="w-40 border rounded px-1 py-1"></td>
+                                    <td class="px-2 py-2"><input v-model="item.url" @input="onDataChange" class="w-56 border rounded px-1 py-1 text-xs"></td>
+                                    <td class="px-2 py-2"><input v-model="item.category" @input="onDataChange" class="w-24 border rounded px-1 py-1"></td>
+                                    <td class="px-2 py-2"><input v-model="item.id" @input="onDataChange" class="w-28 border rounded px-1 py-1"></td>
                                     <td class="px-2 py-2"><button @click="removeItem(catIdx, itemIdx)" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <div v-if="navData.length === 0" class="text-center text-gray-400 py-12"><i class="fas fa-folder-open text-4xl mb-2"></i><p>暂无分类，点击“添加分类”开始</p></div>
+                <div v-if="navData.length === 0" class="text-center text-gray-400 py-12"><i class="fas fa-folder-open text-4xl mb-2"></i><p>暂无分类，点击"添加分类"开始</p></div>
             </div>
+        </div>
+
+        <!-- 提示 -->
+        <div class="save-indicator" :class="{ show: showSaveTip }">
+            <i class="fas fa-check-circle"></i> 已保存到本地
+        </div>
+        <div class="sync-indicator" :class="{ show: showSyncTip }">
+            <i class="fab fa-github"></i> {{ syncTipText }}
         </div>
 
         <!-- 生成代码模态框 -->
         <div v-if="showCodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showCodeModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">TypeScript 代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="flex-1 overflow-auto p-4"><pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto"><code>{{ generatedCode }}</code></pre></div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="copyCode" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">复制代码</button><button @click="showCodeModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">关闭</button></div>
             </div>
         </div>
 
-        <!-- 推送配置模态框（带记住Token） -->
+        <!-- 推送配置模态框 -->
         <div v-if="showPushModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">推送到 GitHub 仓库</h3><button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">GitHub 推送设置</h3><button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="p-6 space-y-4">
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"><p class="text-xs text-gray-500 mt-1">需要 <code>repo</code> 权限。 <a href="https://github.com/settings/tokens/new?scopes=repo" target="_blank" class="text-blue-600">点击创建 Token</a></p></div>
-                    <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm text-gray-600">记住 Token（保存在本机，下次自动填写）</span></label></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"></div>
+                    <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm">记住 Token</span></label></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/Ashguanggao"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">提交信息</label><input v-model="commitMsg" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="chore: update navigation data"></div>
-                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i> 注意：推送将直接修改您的仓库文件，请谨慎操作。建议先导出 JSON 备份。</div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">分支</label><input v-model="branch" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="main"></div>
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-3 text-sm text-blue-800">
+                        <i class="fas fa-info-circle mr-1"></i> 开启"自动同步"后，任何修改都会自动推送到 GitHub
+                    </div>
                 </div>
-                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="pushToGitHub" :disabled="pushing" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2"><i v-if="pushing" class="fas fa-spinner fa-spin"></i>{{ pushing ? '推送中...' : '确认推送' }}</button></div>
+                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="saveGitHubSettings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm">保存设置</button></div>
             </div>
         </div>
     </div>
 
     <script>
-        const { createApp, ref } = Vue;
+        const { createApp, ref, onMounted } = Vue;
 
-        // 完整默认数据（包含你提供的所有条目）
         const defaultNavData = [
             {
                 title: "软件",
                 icon: "lucide:code",
                 items: [
-                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
-                    { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "购买请联系我", url: "https://tool.gljlw.com/qq/?qq=1226407713", category: "在线中", id: "DEV002" },
-                    { name: "Tg客服", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "来找我聊天吹水~", url: "https://t.me/dianbaodashen1", category: "在线中", id: "DEV003" },
-                    { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
-                    { name: "X", avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png", description: "国外人都在用的微博", url: "https://x.com/", category: "推特", id: "DEV005" },
-                    { name: "Shadowrocket", avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp", description: "IOS端最好用的加速器", url: "https://apps.apple.com/us/app/shadowrocket/id932747118", category: "小火箭", id: "DEV006" },
-                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" },
-                    { name: "Gmail", avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png", description: "Google的免费网络邮件服务", url: "https://workspace.google.com/intl/zh-CN/gmail/", category: "谷歌邮箱", id: "DEV008" },
-                    { name: "Google", avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png", description: "最强大的搜索引擎", url: "https://www.google.cn/", category: "谷歌", id: "DEV009" },
-                    { name: "Instagram", avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png", description: "国外人都在用的小红书", url: "https://www.instagram.com/", category: "ig·ins", id: "DEV010" },
-                    { name: "TikTok", avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp", description: "国外人都在用的抖音", url: "https://www.tiktok.com/", category: "抖音", id: "DEV011" },
-                    { name: "Facebook", avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png", description: "全球最大的社交网络服务平台", url: "https://www.facebook.com/", category: "脸书", id: "DEV012" },
-                    { name: "WhatsApp", avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png", description: "跨平台即时通讯应用程序", url: "https://www.whatsapp.com/", category: "WhatsApp", id: "DEV013" }
+                    { name: "客服QQ", avatar: "", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
+                    { name: "Telegram", avatar: "", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
+                    { name: "X", avatar: "", description: "国外人都在用的微博", url: "https://x.com/", category: "推特", id: "DEV005" }
                 ]
             }
         ];
 
         createApp({
             setup() {
-                // 数据
-                const navData = ref(JSON.parse(JSON.stringify(defaultNavData)));
+                const loadInitialData = () => {
+                    const saved = localStorage.getItem('navData_manager');
+                    if (saved) {
+                        try { return JSON.parse(saved); }
+                        catch(e) { return JSON.parse(JSON.stringify(defaultNavData)); }
+                    }
+                    return JSON.parse(JSON.stringify(defaultNavData));
+                };
+                
+                const navData = ref(loadInitialData());
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
                 const showPushModal = ref(false);
                 const githubToken = ref('');
                 const saveToken = ref(false);
-                const repoName = ref('857d/RyuChan');
-                const filePath = ref('src/data/navData.ts');   // 修改为正确路径
-                const commitMsg = ref('chore: update navigation data');
+                const repoName = ref('857d/Ashguanggao');
+                const filePath = ref('src/data/navData.ts');
+                const branch = ref('main');
+                const commitMsg = ref('auto: update navigation data');
                 const pushing = ref(false);
-
-                // 加载本地存储的 Token
-                const storedToken = localStorage.getItem('github_token');
-                if (storedToken) {
-                    githubToken.value = storedToken;
-                    saveToken.value = true;
-                }
-
-                // 辅助方法
-                const addCategory = () => navData.value.push({ title: "新分类", icon: "lucide:folder", items: [] });
-                const removeCategory = (idx) => { if (confirm(`删除分类“${navData.value[idx].title}”?`)) navData.value.splice(idx, 1); };
-                const addItem = (catIdx) => navData.value[catIdx].items.push({ name: "新项目", avatar: "", description: "", url: "", category: "", id: `ITEM${Date.now()}` });
-                const removeItem = (catIdx, itemIdx) => navData.value[catIdx].items.splice(itemIdx, 1);
-                const exportData = () => { const dataStr = JSON.stringify(navData.value, null, 2); const blob = new Blob([dataStr], {type: "application/json"}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'navData.json'; a.click(); URL.revokeObjectURL(url); };
-                const importData = (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (e) => { try { const data = JSON.parse(e.target.result); if (Array.isArray(data)) navData.value = data; else alert('无效格式'); } catch (err) { alert('解析失败'); } }; reader.readAsText(file); };
-                const generateCode = () => { const code = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};`; generatedCode.value = code; showCodeModal.value = true; };
-                const copyCode = () => { navigator.clipboard.writeText(generatedCode.value); alert('代码已复制'); };
-
-                const pushToGitHub = async () => {
-                    if (!githubToken.value) { alert('请输入 GitHub Token'); return; }
-                    if (!repoName.value) { alert('请输入仓库名'); return; }
-                    if (!filePath.value) { alert('请输入文件路径'); return; }
-                    pushing.value = true;
+                const autoSyncEnabled = ref(false);
+                const showSaveTip = ref(false);
+                const showSyncTip = ref(false);
+                const syncTipText = ref('');
+                
+                let syncTimeout = null;
+                let saveTipTimeout = null;
+                
+                const showSaveMessage = () => {
+                    showSaveTip.value = true;
+                    if (saveTipTimeout) clearTimeout(saveTipTimeout);
+                    saveTipTimeout = setTimeout(() => { showSaveTip.value = false; }, 2000);
+                };
+                
+                const showSyncMessage = (text, isError = false) => {
+                    syncTipText.value = text;
+                    showSyncTip.value = true;
+                    setTimeout(() => { showSyncTip.value = false; }, 3000);
+                };
+                
+                const saveToLocal = () => {
+                    localStorage.setItem('navData_manager', JSON.stringify(navData.value));
+                    showSaveMessage();
+                };
+                
+                const pushToGitHub = async (showMsg = true) => {
+                    if (!githubToken.value) {
+                        if (showMsg) alert('请先在推送设置中配置 GitHub Token');
+                        return false;
+                    }
+                    if (!repoName.value) {
+                        if (showMsg) alert('请先在推送设置中配置仓库名');
+                        return false;
+                    }
+                    
+                    if (showMsg) pushing.value = true;
+                    
                     try {
-                        const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
+                        const fileContent = `// 导航数据 - 自动生成\nexport const NAV_DATA = ${JSON.stringify(navData.value, null, 2)};\n`;
                         const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
-
+                        
                         const getUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
                         let sha = null;
                         try {
-                            const getRes = await fetch(getUrl, { headers: { Authorization: `token ${githubToken.value}` } });
-                            if (getRes.ok) { const data = await getRes.json(); sha = data.sha; }
-                        } catch (err) { /* 文件不存在，将创建 */ }
-
-                        const putBody = { message: commitMsg.value, content: encodedContent, branch: 'main' };
+                            const getRes = await fetch(getUrl, { 
+                                headers: { Authorization: `token ${githubToken.value}` } 
+                            });
+                            if (getRes.ok) { 
+                                const data = await getRes.json(); 
+                                sha = data.sha; 
+                            }
+                        } catch (err) { }
+                        
+                        const putBody = { 
+                            message: `${commitMsg.value} - ${new Date().toLocaleString()}`, 
+                            content: encodedContent, 
+                            branch: branch.value 
+                        };
                         if (sha) putBody.sha = sha;
+                        
                         const putRes = await fetch(`https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`, {
                             method: 'PUT',
                             headers: { Authorization: `token ${githubToken.value}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify(putBody)
                         });
+                        
                         if (putRes.ok) {
-                            if (saveToken.value) localStorage.setItem('github_token', githubToken.value);
-                            else localStorage.removeItem('github_token');
-                            alert('✅ 推送成功！博客将自动重新部署。');
-                            showPushModal.value = false;
+                            showSyncMessage('✅ 已同步到 GitHub');
+                            return true;
                         } else {
                             const err = await putRes.json();
-                            alert('推送失败：' + (err.message || '未知错误'));
+                            showSyncMessage('❌ 同步失败: ' + (err.message || '未知错误'), true);
+                            return false;
                         }
-                    } catch (err) { alert('推送失败：' + err.message); }
-                    finally { pushing.value = false; }
+                    } catch (err) { 
+                        showSyncMessage('❌ 同步失败: ' + err.message, true);
+                        return false;
+                    } finally { 
+                        if (showMsg) pushing.value = false; 
+                    }
                 };
-
+                
+                const onDataChange = async () => {
+                    saveToLocal();
+                    if (autoSyncEnabled.value && githubToken.value && repoName.value) {
+                        if (syncTimeout) clearTimeout(syncTimeout);
+                        syncTimeout = setTimeout(async () => {
+                            await pushToGitHub(false);
+                        }, 2000);
+                    }
+                };
+                
+                const loadGitHubSettings = () => {
+                    const token = localStorage.getItem('github_token');
+                    const repo = localStorage.getItem('github_repo');
+                    const path = localStorage.getItem('github_path');
+                    const autoSync = localStorage.getItem('auto_sync_enabled');
+                    const savedBranch = localStorage.getItem('github_branch');
+                    
+                    if (token) { githubToken.value = token; saveToken.value = true; }
+                    if (repo) repoName.value = repo;
+                    if (path) filePath.value = path;
+                    if (savedBranch) branch.value = savedBranch;
+                    if (autoSync === 'true') autoSyncEnabled.value = true;
+                };
+                
+                const saveGitHubSettings = () => {
+                    if (saveToken.value && githubToken.value) {
+                        localStorage.setItem('github_token', githubToken.value);
+                    } else if (!saveToken.value) {
+                        localStorage.removeItem('github_token');
+                    }
+                    if (repoName.value) localStorage.setItem('github_repo', repoName.value);
+                    if (filePath.value) localStorage.setItem('github_path', filePath.value);
+                    if (branch.value) localStorage.setItem('github_branch', branch.value);
+                    showPushModal.value = false;
+                    alert('设置已保存');
+                };
+                
+                const toggleAutoSync = () => {
+                    localStorage.setItem('auto_sync_enabled', autoSyncEnabled.value);
+                    if (autoSyncEnabled.value && (!githubToken.value || !repoName.value)) {
+                        alert('请先在推送设置中配置 GitHub Token 和仓库名');
+                        autoSyncEnabled.value = false;
+                        localStorage.setItem('auto_sync_enabled', 'false');
+                    }
+                };
+                
+                const resetToDefault = () => {
+                    if (confirm('重置将丢失所有修改，确定吗？')) {
+                        navData.value = JSON.parse(JSON.stringify(defaultNavData));
+                        onDataChange();
+                    }
+                };
+                
+                const addCategory = () => {
+                    navData.value.push({ title: "新分类", icon: "lucide:folder", items: [] });
+                    onDataChange();
+                };
+                
+                const removeCategory = (idx) => { 
+                    if (confirm(`删除分类"${navData.value[idx].title}"?`)) {
+                        navData.value.splice(idx, 1);
+                        onDataChange();
+                    }
+                };
+                
+                const addItem = (catIdx) => {
+                    navData.value[catIdx].items.push({ name: "新项目", avatar: "", description: "", url: "", category: "", id: `ITEM${Date.now()}` });
+                    onDataChange();
+                };
+                
+                const removeItem = (catIdx, itemIdx) => {
+                    navData.value[catIdx].items.splice(itemIdx, 1);
+                    onDataChange();
+                };
+                
+                const exportData = () => { 
+                    const dataStr = JSON.stringify(navData.value, null, 2); 
+                    const blob = new Blob([dataStr], {type: "application/json"}); 
+                    const url = URL.createObjectURL(blob); 
+                    const a = document.createElement('a'); 
+                    a.href = url; a.download = 'navData.json'; a.click(); 
+                    URL.revokeObjectURL(url); 
+                };
+                
+                const importData = (event) => { 
+                    const file = event.target.files[0]; 
+                    if (!file) return; 
+                    const reader = new FileReader(); 
+                    reader.onload = (e) => { 
+                        try { 
+                            const data = JSON.parse(e.target.result); 
+                            if (Array.isArray(data)) {
+                                navData.value = data;
+                                onDataChange();
+                                alert('导入成功！');
+                            } else alert('无效格式'); 
+                        } catch (err) { alert('解析失败'); } 
+                    }; 
+                    reader.readAsText(file); 
+                    event.target.value = '';
+                };
+                
+                const generateCode = () => { 
+                    generatedCode.value = `export const NAV_DATA = ${JSON.stringify(navData.value, null, 2)};`; 
+                    showCodeModal.value = true; 
+                };
+                
+                const copyCode = () => { navigator.clipboard.writeText(generatedCode.value); alert('代码已复制'); };
+                
+                // 拖拽排序
+                let dragSourceCategory = null;
+                let dragSourceItem = null;
+                
+                const handleCategoryDragStart = (e, catIdx) => {
+                    dragSourceCategory = catIdx;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.target.classList.add('dragging');
+                };
+                
+                const handleCategoryDragOver = (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                };
+                
+                const handleCategoryDragEnd = (e) => {
+                    e.target.classList.remove('dragging');
+                    dragSourceCategory = null;
+                };
+                
+                const handleCategoryDrop = (e, targetCatIdx) => {
+                    e.preventDefault();
+                    if (dragSourceCategory !== null && dragSourceCategory !== targetCatIdx) {
+                        const movedItem = navData.value.splice(dragSourceCategory, 1)[0];
+                        const newIndex = dragSourceCategory < targetCatIdx ? targetCatIdx - 1 : targetCatIdx;
+                        navData.value.splice(newIndex, 0, movedItem);
+                        onDataChange();
+                    }
+                    handleCategoryDragEnd(e);
+                };
+                
+                const handleItemDragStart = (e, catIdx, itemIdx) => {
+                    dragSourceItem = { categoryIdx: catIdx, itemIdx: itemIdx };
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ catIdx, itemIdx }));
+                    e.target.classList.add('dragging');
+                };
+                
+                const handleItemDragOver = (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                };
+                
+                const handleItemDragEnd = (e) => {
+                    e.target.classList.remove('dragging');
+                    dragSourceItem = null;
+                };
+                
+                const handleItemDrop = (e, targetCatIdx, targetItemIdx) => {
+                    e.preventDefault();
+                    if (!dragSourceItem) {
+                        try {
+                            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                            dragSourceItem = data;
+                        } catch(err) { return; }
+                    }
+                    
+                    const sourceCatIdx = dragSourceItem.categoryIdx;
+                    const sourceItemIdx = dragSourceItem.itemIdx;
+                    if (sourceCatIdx === undefined) return;
+                    
+                    const targetRow = e.target.closest('.item-row');
+                    let finalTargetIdx = targetItemIdx;
+                    if (targetRow) {
+                        const rect = targetRow.getBoundingClientRect();
+                        const mouseY = e.clientY;
+                        if (mouseY > rect.top + rect.height / 2) {
+                            finalTargetIdx = targetItemIdx + 1;
+                        }
+                    }
+                    
+                    if (sourceCatIdx === targetCatIdx) {
+                        const items = navData.value[sourceCatIdx].items;
+                        if (sourceItemIdx !== finalTargetIdx) {
+                            const movedItem = items.splice(sourceItemIdx, 1)[0];
+                            let adjustedTarget = finalTargetIdx;
+                            if (sourceItemIdx < finalTargetIdx) adjustedTarget = finalTargetIdx - 1;
+                            items.splice(adjustedTarget, 0, movedItem);
+                            onDataChange();
+                        }
+                    } else {
+                        const sourceItems = navData.value[sourceCatIdx].items;
+                        const targetItems = navData.value[targetCatIdx].items;
+                        const movedItem = sourceItems.splice(sourceItemIdx, 1)[0];
+                        targetItems.splice(finalTargetIdx, 0, movedItem);
+                        onDataChange();
+                    }
+                    dragSourceItem = null;
+                };
+                
+                onMounted(() => {
+                    loadGitHubSettings();
+                    document.body.addEventListener('dragover', (e) => e.preventDefault());
+                    document.body.addEventListener('drop', (e) => e.preventDefault());
+                });
+                
                 return {
-                    navData, showCodeModal, generatedCode, showPushModal, githubToken, saveToken, repoName, filePath, commitMsg, pushing,
-                    addCategory, removeCategory, addItem, removeItem, exportData, importData, generateCode, copyCode, pushToGitHub
+                    navData, showCodeModal, generatedCode, showPushModal, 
+                    githubToken, saveToken, repoName, filePath, branch, commitMsg, pushing,
+                    autoSyncEnabled, showSaveTip, showSyncTip, syncTipText,
+                    addCategory, removeCategory, addItem, removeItem, 
+                    exportData, importData, generateCode, copyCode, 
+                    resetToDefault, onDataChange,
+                    pushToGitHub, saveGitHubSettings, toggleAutoSync,
+                    handleCategoryDragStart, handleCategoryDragOver, handleCategoryDragEnd, handleCategoryDrop,
+                    handleItemDragStart, handleItemDragOver, handleItemDragEnd, handleItemDrop
                 };
             }
         }).mount('#app');
