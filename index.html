@@ -147,6 +147,39 @@
     <script>
         const { createApp, ref, onMounted } = Vue;
 
+        // ========== 可靠的 UTF-8 Base64 编解码函数 ==========
+        function encodeUtf8Base64(str) {
+            try {
+                // 方法1：使用 TextEncoder（现代浏览器，最可靠）
+                const encoder = new TextEncoder();
+                const data = encoder.encode(str);
+                let binary = '';
+                for (let i = 0; i < data.length; i++) {
+                    binary += String.fromCharCode(data[i]);
+                }
+                return btoa(binary);
+            } catch (e) {
+                // 方法2：备用方案（兼容旧浏览器）
+                return btoa(unescape(encodeURIComponent(str)));
+            }
+        }
+
+        function decodeUtf8Base64(base64Str) {
+            try {
+                // 方法1：使用 TextDecoder（现代浏览器，最可靠）
+                const binary = atob(base64Str);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                const decoder = new TextDecoder('utf-8');
+                return decoder.decode(bytes);
+            } catch (e) {
+                // 方法2：备用方案（兼容旧浏览器）
+                return decodeURIComponent(escape(atob(base64Str)));
+            }
+        }
+
         // 默认数据
         const defaultNavData = [
             {
@@ -155,8 +188,8 @@
                 items: [
                     { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
                     { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "购买请联系我", url: "https://tool.gljlw.com/qq/?qq=1226407713", category: "在线中", id: "DEV002" },
-                    { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
-                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" }
+                    { name: "Tg客服", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "来找我聊天吹水~", url: "https://t.me/dianbaodashen1", category: "在线中", id: "DEV003" },
+                    { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" }
                 ]
             }
         ];
@@ -232,23 +265,30 @@
                         }
                         
                         const data = await response.json();
-                        const content = atob(data.content);
+                        // 使用正确的 UTF-8 解码
+                        const content = decodeUtf8Base64(data.content);
                         
                         // 解析 TypeScript 文件中的 JSON 数据
-                        const jsonMatch = content.match(/export const NAV_DATA:.*?=\s*(\[[\s\S]*?\]);/);
+                        const jsonMatch = content.match(/export\s+const\s+NAV_DATA(?:\s*:\s*\w+\[\])?\s*=\s*(\[[\s\S]*?\]);/);
                         if (jsonMatch) {
-                            const parsedData = JSON.parse(jsonMatch[1]);
-                            if (Array.isArray(parsedData) && parsedData.length > 0) {
-                                navData.value = parsedData;
-                                saveToLocal();
-                                if (showMsg) alert('加载成功！已从 GitHub 同步最新数据');
-                                showSyncMessage('✅ 已从 GitHub 加载数据');
-                                return true;
+                            try {
+                                const parsedData = JSON.parse(jsonMatch[1]);
+                                if (Array.isArray(parsedData) && parsedData.length > 0) {
+                                    navData.value = parsedData;
+                                    saveToLocal();
+                                    if (showMsg) alert('加载成功！已从 GitHub 同步最新数据');
+                                    showSyncMessage('✅ 已从 GitHub 加载数据');
+                                    return true;
+                                }
+                            } catch (parseErr) {
+                                console.error('JSON 解析错误:', parseErr);
+                                throw new Error('JSON 解析失败');
                             }
                         }
                         
                         throw new Error('无法解析数据文件');
                     } catch (err) {
+                        console.error('加载错误:', err);
                         if (showMsg) alert('加载失败: ' + err.message);
                         showSyncMessage('❌ 加载失败: ' + err.message);
                         return false;
@@ -273,9 +313,13 @@
                     loadingText.value = '正在推送到 GitHub...';
                     
                     try {
+                        // 生成文件内容
                         const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
-                        const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
                         
+                        // 使用可靠的 UTF-8 编码
+                        const encodedContent = encodeUtf8Base64(fileContent);
+                        
+                        // 获取文件当前 SHA（如果存在）
                         const getUrl = `https://api.github.com/repos/${targetRepo.value}/contents/${targetFilePath.value}`;
                         let sha = null;
                         try {
@@ -288,6 +332,7 @@
                             }
                         } catch (err) { }
                         
+                        // 推送文件
                         const putBody = { 
                             message: `${commitMsg.value} - ${new Date().toLocaleString()}`, 
                             content: encodedContent, 
@@ -310,6 +355,7 @@
                             throw new Error(err.message || '推送失败');
                         }
                     } catch (err) { 
+                        console.error('推送错误:', err);
                         showSyncMessage('❌ 推送失败: ' + err.message);
                         if (showMsg) alert('推送失败: ' + err.message);
                         return false;
@@ -343,7 +389,6 @@
                     if (savedBranch) branch.value = savedBranch;
                     if (autoSync === 'true') autoSyncEnabled.value = true;
                     
-                    // 如果有本地缓存，先加载
                     if (savedData) {
                         try {
                             const cached = JSON.parse(savedData);
@@ -428,7 +473,7 @@
                             } else alert('无效格式'); 
                         } catch (err) { alert('解析失败'); } 
                     }; 
-                    reader.readAsText(file); 
+                    reader.readAsText(file, 'UTF-8'); 
                     event.target.value = '';
                 };
                 
@@ -504,7 +549,6 @@
                     dragSourceItem = null;
                 };
                 
-                // 页面加载时自动从 GitHub 拉取数据
                 onMounted(async () => {
                     loadGitHubSettings();
                     if (githubToken.value && targetRepo.value) {
