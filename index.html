@@ -29,9 +29,9 @@
                     <i class="fas fa-compass"></i> 导航数据管理器
                 </h1>
                 <p class="text-blue-100 text-sm mt-1 flex items-center gap-3 flex-wrap">
-                    双向同步 | 数据来自 GitHub
-                    <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">云端存储</span>
-                    <span v-if="autoSyncEnabled" class="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">自动同步</span>
+                    双向同步 | 手动推送为主
+                    <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">本地存储</span>
+                    <span v-if="autoSyncEnabled" class="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">定时同步(30分钟)</span>
                 </p>
             </div>
 
@@ -49,7 +49,7 @@
                 <div class="flex gap-2 items-center">
                     <div class="auto-sync-toggle">
                         <i class="fab fa-github text-gray-600"></i>
-                        <span class="text-sm">自动同步</span>
+                        <span class="text-sm">定时同步(30分钟)</span>
                         <input type="checkbox" v-model="autoSyncEnabled" @change="toggleAutoSync" class="rounded">
                     </div>
                     <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 推送设置</button>
@@ -136,7 +136,8 @@
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">数据文件路径</label><input v-model="targetFilePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">分支</label><input v-model="branch" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="main"></div>
                     <div class="bg-green-50 border-l-4 border-green-400 p-3 text-sm text-green-800">
-                        <i class="fas fa-info-circle mr-1"></i> 配置完成后，点击「从 GitHub 加载」获取云端数据，点击「立即推送」保存修改。
+                        <i class="fas fa-info-circle mr-1"></i> 开启定时同步后，每30分钟自动推送一次。<br>
+                        <strong>修改后请点击「立即推送」手动保存到云端。</strong>
                     </div>
                 </div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="saveGitHubSettings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm">保存设置</button></div>
@@ -145,12 +146,11 @@
     </div>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref, onMounted, onUnmounted } = Vue;
 
         // ========== 可靠的 UTF-8 Base64 编解码函数 ==========
         function encodeUtf8Base64(str) {
             try {
-                // 方法1：使用 TextEncoder（现代浏览器，最可靠）
                 const encoder = new TextEncoder();
                 const data = encoder.encode(str);
                 let binary = '';
@@ -159,14 +159,12 @@
                 }
                 return btoa(binary);
             } catch (e) {
-                // 方法2：备用方案（兼容旧浏览器）
                 return btoa(unescape(encodeURIComponent(str)));
             }
         }
 
         function decodeUtf8Base64(base64Str) {
             try {
-                // 方法1：使用 TextDecoder（现代浏览器，最可靠）
                 const binary = atob(base64Str);
                 const bytes = new Uint8Array(binary.length);
                 for (let i = 0; i < binary.length; i++) {
@@ -175,7 +173,6 @@
                 const decoder = new TextDecoder('utf-8');
                 return decoder.decode(bytes);
             } catch (e) {
-                // 方法2：备用方案（兼容旧浏览器）
                 return decodeURIComponent(escape(atob(base64Str)));
             }
         }
@@ -215,8 +212,8 @@
                 const saveTipText = ref('');
                 const syncTipText = ref('');
                 
-                let syncTimeout = null;
                 let saveTipTimeout = null;
+                let autoSyncInterval = null;
                 
                 const showSaveMessage = (msg) => {
                     saveTipText.value = msg || '已保存到本地';
@@ -265,10 +262,8 @@
                         }
                         
                         const data = await response.json();
-                        // 使用正确的 UTF-8 解码
                         const content = decodeUtf8Base64(data.content);
                         
-                        // 解析 TypeScript 文件中的 JSON 数据
                         const jsonMatch = content.match(/export\s+const\s+NAV_DATA(?:\s*:\s*\w+\[\])?\s*=\s*(\[[\s\S]*?\]);/);
                         if (jsonMatch) {
                             try {
@@ -281,14 +276,11 @@
                                     return true;
                                 }
                             } catch (parseErr) {
-                                console.error('JSON 解析错误:', parseErr);
                                 throw new Error('JSON 解析失败');
                             }
                         }
-                        
                         throw new Error('无法解析数据文件');
                     } catch (err) {
-                        console.error('加载错误:', err);
                         if (showMsg) alert('加载失败: ' + err.message);
                         showSyncMessage('❌ 加载失败: ' + err.message);
                         return false;
@@ -313,13 +305,9 @@
                     loadingText.value = '正在推送到 GitHub...';
                     
                     try {
-                        // 生成文件内容
                         const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
-                        
-                        // 使用可靠的 UTF-8 编码
                         const encodedContent = encodeUtf8Base64(fileContent);
                         
-                        // 获取文件当前 SHA（如果存在）
                         const getUrl = `https://api.github.com/repos/${targetRepo.value}/contents/${targetFilePath.value}`;
                         let sha = null;
                         try {
@@ -332,7 +320,6 @@
                             }
                         } catch (err) { }
                         
-                        // 推送文件
                         const putBody = { 
                             message: `${commitMsg.value} - ${new Date().toLocaleString()}`, 
                             content: encodedContent, 
@@ -355,7 +342,6 @@
                             throw new Error(err.message || '推送失败');
                         }
                     } catch (err) { 
-                        console.error('推送错误:', err);
                         showSyncMessage('❌ 推送失败: ' + err.message);
                         if (showMsg) alert('推送失败: ' + err.message);
                         return false;
@@ -365,13 +351,28 @@
                     }
                 };
                 
+                // 数据修改时只保存到本地，不自动推送
                 const onDataChange = async () => {
                     saveToLocal();
+                    // 不自动推送，需要用户手动点击「立即推送」
+                };
+                
+                // 定时自动同步（30分钟一次）
+                const startAutoSyncTimer = () => {
+                    if (autoSyncInterval) clearInterval(autoSyncInterval);
                     if (autoSyncEnabled.value && githubToken.value && targetRepo.value) {
-                        if (syncTimeout) clearTimeout(syncTimeout);
-                        syncTimeout = setTimeout(async () => {
+                        autoSyncInterval = setInterval(async () => {
+                            console.log('定时自动同步执行:', new Date().toLocaleString());
                             await pushToGitHub(false);
-                        }, 3000);
+                            showSyncMessage('⏰ 定时同步：已推送到 GitHub');
+                        }, 30 * 60 * 1000); // 30分钟
+                    }
+                };
+                
+                const stopAutoSyncTimer = () => {
+                    if (autoSyncInterval) {
+                        clearInterval(autoSyncInterval);
+                        autoSyncInterval = null;
                     }
                 };
                 
@@ -410,6 +411,11 @@
                     localStorage.setItem('github_branch', branch.value);
                     showPushModal.value = false;
                     alert('设置已保存');
+                    
+                    // 如果定时同步已开启，重新启动定时器
+                    if (autoSyncEnabled.value) {
+                        startAutoSyncTimer();
+                    }
                 };
                 
                 const toggleAutoSync = () => {
@@ -418,6 +424,12 @@
                         alert('请先在推送设置中配置 GitHub Token 和目标仓库');
                         autoSyncEnabled.value = false;
                         localStorage.setItem('auto_sync_enabled', 'false');
+                    } else if (autoSyncEnabled.value) {
+                        startAutoSyncTimer();
+                        showSyncMessage('⏰ 自动同步已开启（每30分钟一次）');
+                    } else {
+                        stopAutoSyncTimer();
+                        showSyncMessage('自动同步已关闭');
                     }
                 };
                 
@@ -553,9 +565,16 @@
                     loadGitHubSettings();
                     if (githubToken.value && targetRepo.value) {
                         await loadFromGitHub(false);
+                        if (autoSyncEnabled.value) {
+                            startAutoSyncTimer();
+                        }
                     }
                     document.body.addEventListener('dragover', (e) => e.preventDefault());
                     document.body.addEventListener('drop', (e) => e.preventDefault());
+                });
+                
+                onUnmounted(() => {
+                    stopAutoSyncTimer();
                 });
                 
                 return {
