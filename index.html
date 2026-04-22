@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航数据管理器 - 双仓库同步版</title>
+    <title>导航数据管理器 - 双向同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -18,7 +18,7 @@
         .sync-indicator { position: fixed; bottom: 20px; right: 20px; background: #f59e0b; color: white; padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; z-index: 1000; }
         .sync-indicator.show { opacity: 1; }
         .auto-sync-toggle { background: #f3f4f6; border-radius: 20px; padding: 4px 12px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
-        .status-bar { background: #1e293b; color: #94a3b8; padding: 4px 12px; border-radius: 8px; font-size: 12px; }
+        .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
     </style>
 </head>
 <body class="bg-gray-100 p-4 md:p-6">
@@ -29,9 +29,9 @@
                     <i class="fas fa-compass"></i> 导航数据管理器
                 </h1>
                 <p class="text-blue-100 text-sm mt-1 flex items-center gap-3 flex-wrap">
-                    拖拽排序 | 数据自动保存
-                    <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">本地存储</span>
-                    <span v-if="autoSyncEnabled" class="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">自动同步 GitHub</span>
+                    双向同步 | 数据来自 GitHub
+                    <span class="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">云端存储</span>
+                    <span v-if="autoSyncEnabled" class="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">自动同步</span>
                 </p>
             </div>
 
@@ -43,6 +43,7 @@
                         <i class="fas fa-upload"></i> 导入 JSON
                         <input type="file" @change="importData" accept=".json" class="hidden">
                     </label>
+                    <button @click="loadFromGitHub" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-download"></i> 从 GitHub 加载</button>
                     <button @click="resetToDefault" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-undo-alt"></i> 重置默认</button>
                 </div>
                 <div class="flex gap-2 items-center">
@@ -51,11 +52,12 @@
                         <span class="text-sm">自动同步</span>
                         <input type="checkbox" v-model="autoSyncEnabled" @change="toggleAutoSync" class="rounded">
                     </div>
-                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 手动推送</button>
-                    <button @click="generateCode" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-code"></i> 生成代码</button>
+                    <button @click="showPushModal = true" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fab fa-github"></i> 推送设置</button>
+                    <button @click="pushToGitHub(true)" :disabled="pushing" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i v-if="pushing" class="fas fa-spinner fa-spin"></i>{{ pushing ? '推送中...' : '立即推送' }}</button>
                 </div>
             </div>
 
+            <!-- 分类列表 -->
             <div class="p-4 space-y-6 max-h-[70vh] overflow-y-auto" id="categoriesContainer">
                 <div 
                     v-for="(cat, catIdx) in navData" 
@@ -112,30 +114,29 @@
         </div>
 
         <!-- 提示 -->
-        <div class="save-indicator" :class="{ show: showSaveTip }"><i class="fas fa-check-circle"></i> 已保存到本地</div>
+        <div class="save-indicator" :class="{ show: showSaveTip }"><i class="fas fa-check-circle"></i> {{ saveTipText }}</div>
         <div class="sync-indicator" :class="{ show: showSyncTip }"><i class="fab fa-github"></i> {{ syncTipText }}</div>
 
-        <!-- 生成代码模态框 -->
-        <div v-if="showCodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showCodeModal=false">
-            <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">TypeScript 代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
-                <div class="flex-1 overflow-auto p-4"><pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto"><code>{{ generatedCode }}</code></pre></div>
-                <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="copyCode" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">复制代码</button><button @click="showCodeModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">关闭</button></div>
+        <!-- 加载中遮罩 -->
+        <div v-if="loading" class="loading-overlay">
+            <div class="bg-white rounded-lg p-6 flex items-center gap-3">
+                <i class="fas fa-spinner fa-spin text-blue-600 text-2xl"></i>
+                <span>{{ loadingText }}</span>
             </div>
         </div>
 
         <!-- 推送配置模态框 -->
         <div v-if="showPushModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showPushModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">GitHub 推送设置</h3><button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">GitHub 同步设置</h3><button @click="showPushModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="p-6 space-y-4">
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">GitHub Token</label><input type="password" v-model="githubToken" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ghp_xxxxxxxxxxxx"></div>
                     <div><label class="flex items-center gap-2"><input type="checkbox" v-model="saveToken" class="rounded"><span class="text-sm">记住 Token</span></label></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/Ashguanggao"></div>
-                    <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">数据仓库 (owner/repo)</label><input v-model="targetRepo" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/RyuChan"></div>
+                    <div><label class="block text-sm font-medium text-gray-700 mb-1">数据文件路径</label><input v-model="targetFilePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">分支</label><input v-model="branch" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="main"></div>
-                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">
-                        <i class="fas fa-info-circle mr-1"></i> 推送前请确认仓库中存在 <code>{{ filePath }}</code> 这个文件
+                    <div class="bg-green-50 border-l-4 border-green-400 p-3 text-sm text-green-800">
+                        <i class="fas fa-info-circle mr-1"></i> 配置完成后，点击「从 GitHub 加载」获取云端数据，点击「立即推送」保存修改。
                     </div>
                 </div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="saveGitHubSettings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm">保存设置</button></div>
@@ -146,7 +147,7 @@
     <script>
         const { createApp, ref, onMounted } = Vue;
 
-        // 完整默认数据（13个项目）
+        // 默认数据
         const defaultNavData = [
             {
                 title: "软件",
@@ -154,52 +155,38 @@
                 items: [
                     { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "任何问题请联系", url: "https://tool.gljlw.com/qq/?qq=971165458", category: "在线中", id: "DEV001" },
                     { name: "客服QQ", avatar: "https://cdn.phototourl.com/member/2026-04-17-80c50d45-46c6-42df-ab3b-66925a91f976.webp", description: "购买请联系我", url: "https://tool.gljlw.com/qq/?qq=1226407713", category: "在线中", id: "DEV002" },
-                    { name: "Tg客服", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "来找我聊天吹水~", url: "https://t.me/dianbaodashen1", category: "在线中", id: "DEV003" },
                     { name: "Telegram", avatar: "https://cdn.phototourl.com/free/2026-04-17-f9dd10ed-b476-4800-8f29-533baf3c082a.png", description: "跨平台的即时通讯软件", url: "https://telegram.org/", category: "纸飞机", id: "DEV004" },
-                    { name: "X", avatar: "https://cdn.phototourl.com/free/2026-04-17-6c61e698-1031-4acd-b712-3b0d20389a48.png", description: "国外人都在用的微博", url: "https://x.com/", category: "推特", id: "DEV005" },
-                    { name: "Shadowrocket", avatar: "https://cdn.phototourl.com/free/2026-04-17-3cd5fd0c-a85f-4804-ab54-f93d51c70b25.webp", description: "IOS端最好用的加速器", url: "https://apps.apple.com/us/app/shadowrocket/id932747118", category: "小火箭", id: "DEV006" },
-                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" },
-                    { name: "Gmail", avatar: "https://cdn.phototourl.com/member/2026-04-17-41450d8d-bd89-4c89-8a1c-4f1893730437.png", description: "Google的免费网络邮件服务", url: "https://workspace.google.com/intl/zh-CN/gmail/", category: "谷歌邮箱", id: "DEV008" },
-                    { name: "Google", avatar: "https://cdn.phototourl.com/free/2026-04-17-08c19452-1578-4eb0-bee3-947526730092.png", description: "最强大的搜索引擎", url: "https://www.google.cn/", category: "谷歌", id: "DEV009" },
-                    { name: "Instagram", avatar: "https://cdn.phototourl.com/free/2026-04-17-ed8b70e9-19a9-4e49-8a00-1eb279832602.png", description: "国外人都在用的小红书", url: "https://www.instagram.com/", category: "ig·ins", id: "DEV010" },
-                    { name: "TikTok", avatar: "https://cdn.phototourl.com/member/2026-04-17-9c6d5343-fd8c-41a0-8ae3-5b774705d69e.webp", description: "国外人都在用的抖音", url: "https://www.tiktok.com/", category: "抖音", id: "DEV011" },
-                    { name: "Facebook", avatar: "https://cdn.phototourl.com/free/2026-04-17-e5aec287-925b-4a12-8d1d-23847e7ce245.png", description: "全球最大的社交网络服务平台", url: "https://www.facebook.com/", category: "脸书", id: "DEV012" },
-                    { name: "WhatsApp", avatar: "https://cdn.phototourl.com/free/2026-04-17-8ce5a079-7bb0-449c-95d5-125a0c2c103a.png", description: "跨平台即时通讯应用程序", url: "https://www.whatsapp.com/", category: "WhatsApp", id: "DEV013" }
+                    { name: "YouTube", avatar: "https://cdn.phototourl.com/free/2026-04-17-a4633e7a-07c3-4fc6-8972-a9cc48fe911f.png", description: "全球最大的视频分享平台", url: "https://www.youtube.com/", category: "油管", id: "DEV007" }
                 ]
             }
         ];
 
         createApp({
             setup() {
-                const loadInitialData = () => {
-                    const saved = localStorage.getItem('navData_manager');
-                    if (saved) {
-                        try { return JSON.parse(saved); }
-                        catch(e) { return JSON.parse(JSON.stringify(defaultNavData)); }
-                    }
-                    return JSON.parse(JSON.stringify(defaultNavData));
-                };
-                
-                const navData = ref(loadInitialData());
+                const navData = ref(JSON.parse(JSON.stringify(defaultNavData)));
                 const showCodeModal = ref(false);
                 const generatedCode = ref('');
                 const showPushModal = ref(false);
                 const githubToken = ref('');
                 const saveToken = ref(false);
-                const repoName = ref('857d/Ashguanggao');
-                const filePath = ref('src/data/navData.ts');
+                const targetRepo = ref('857d/RyuChan');
+                const targetFilePath = ref('src/data/navData.ts');
                 const branch = ref('main');
                 const commitMsg = ref('update: navigation data');
                 const pushing = ref(false);
+                const loading = ref(false);
+                const loadingText = ref('');
                 const autoSyncEnabled = ref(false);
                 const showSaveTip = ref(false);
                 const showSyncTip = ref(false);
+                const saveTipText = ref('');
                 const syncTipText = ref('');
                 
                 let syncTimeout = null;
                 let saveTipTimeout = null;
                 
-                const showSaveMessage = () => {
+                const showSaveMessage = (msg) => {
+                    saveTipText.value = msg || '已保存到本地';
                     showSaveTip.value = true;
                     if (saveTipTimeout) clearTimeout(saveTipTimeout);
                     saveTipTimeout = setTimeout(() => { showSaveTip.value = false; }, 2000);
@@ -212,35 +199,84 @@
                 };
                 
                 const saveToLocal = () => {
-                    localStorage.setItem('navData_manager', JSON.stringify(navData.value));
-                    showSaveMessage();
+                    localStorage.setItem('navData_manager_backup', JSON.stringify(navData.value));
+                    showSaveMessage('已保存到本地缓存');
                 };
                 
-                const pushToGitHub = async (showMsg = true) => {
+                // 从 GitHub 加载数据
+                const loadFromGitHub = async (showMsg = true) => {
                     if (!githubToken.value) {
-                        if (showMsg) alert('请先配置 GitHub Token');
+                        if (showMsg) alert('请先在推送设置中配置 GitHub Token');
                         return false;
                     }
-                    if (!repoName.value) {
-                        if (showMsg) alert('请先配置仓库名');
+                    if (!targetRepo.value) {
+                        if (showMsg) alert('请先配置数据仓库');
+                        return false;
+                    }
+                    
+                    loading.value = true;
+                    loadingText.value = '正在从 GitHub 加载数据...';
+                    
+                    try {
+                        const url = `https://api.github.com/repos/${targetRepo.value}/contents/${targetFilePath.value}`;
+                        const response = await fetch(url, {
+                            headers: { Authorization: `token ${githubToken.value}` }
+                        });
+                        
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                if (showMsg) alert('GitHub 上未找到数据文件，将使用默认数据');
+                                return false;
+                            }
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        const content = atob(data.content);
+                        
+                        // 解析 TypeScript 文件中的 JSON 数据
+                        const jsonMatch = content.match(/export const NAV_DATA:.*?=\s*(\[[\s\S]*?\]);/);
+                        if (jsonMatch) {
+                            const parsedData = JSON.parse(jsonMatch[1]);
+                            if (Array.isArray(parsedData) && parsedData.length > 0) {
+                                navData.value = parsedData;
+                                saveToLocal();
+                                if (showMsg) alert('加载成功！已从 GitHub 同步最新数据');
+                                showSyncMessage('✅ 已从 GitHub 加载数据');
+                                return true;
+                            }
+                        }
+                        
+                        throw new Error('无法解析数据文件');
+                    } catch (err) {
+                        if (showMsg) alert('加载失败: ' + err.message);
+                        showSyncMessage('❌ 加载失败: ' + err.message);
+                        return false;
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+                
+                // 推送到 GitHub
+                const pushToGitHub = async (showMsg = true) => {
+                    if (!githubToken.value) {
+                        if (showMsg) alert('请先在推送设置中配置 GitHub Token');
+                        return false;
+                    }
+                    if (!targetRepo.value) {
+                        if (showMsg) alert('请先配置目标仓库');
                         return false;
                     }
                     
                     if (showMsg) pushing.value = true;
-                    showSyncMessage('⏳ 正在推送到 ' + filePath.value + ' ...');
+                    loading.value = true;
+                    loadingText.value = '正在推送到 GitHub...';
                     
                     try {
-                        // 生成 TypeScript 格式的数据文件
-                        const fileContent = `// 导航数据 - 由导航管理器自动生成
-// 最后更新: ${new Date().toLocaleString()}
-import type { NavCategory } from './types';
-
-export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};
-`;
+                        const fileContent = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};\n`;
                         const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
                         
-                        // 先获取文件信息（如果存在）
-                        const getUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
+                        const getUrl = `https://api.github.com/repos/${targetRepo.value}/contents/${targetFilePath.value}`;
                         let sha = null;
                         try {
                             const getRes = await fetch(getUrl, { 
@@ -249,15 +285,9 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                             if (getRes.ok) { 
                                 const data = await getRes.json(); 
                                 sha = data.sha;
-                                console.log('文件已存在，SHA:', sha);
-                            } else if (getRes.status === 404) {
-                                console.log('文件不存在，将创建新文件');
                             }
-                        } catch (err) { 
-                            console.log('检查文件时出错:', err);
-                        }
+                        } catch (err) { }
                         
-                        // 推送文件
                         const putBody = { 
                             message: `${commitMsg.value} - ${new Date().toLocaleString()}`, 
                             content: encodedContent, 
@@ -265,36 +295,33 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                         };
                         if (sha) putBody.sha = sha;
                         
-                        const putRes = await fetch(`https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`, {
+                        const putRes = await fetch(`https://api.github.com/repos/${targetRepo.value}/contents/${targetFilePath.value}`, {
                             method: 'PUT',
                             headers: { Authorization: `token ${githubToken.value}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify(putBody)
                         });
                         
                         if (putRes.ok) {
-                            showSyncMessage('✅ 推送成功！已更新 ' + filePath.value);
+                            showSyncMessage('✅ 推送成功！数据已同步到 GitHub');
                             if (showMsg) alert('推送成功！');
                             return true;
                         } else {
                             const err = await putRes.json();
-                            let errorMsg = err.message || '未知错误';
-                            if (err.message?.includes('sha')) errorMsg = '文件冲突，请稍后重试';
-                            showSyncMessage('❌ 推送失败: ' + errorMsg);
-                            if (showMsg) alert('推送失败: ' + errorMsg);
-                            return false;
+                            throw new Error(err.message || '推送失败');
                         }
                     } catch (err) { 
                         showSyncMessage('❌ 推送失败: ' + err.message);
                         if (showMsg) alert('推送失败: ' + err.message);
                         return false;
                     } finally { 
-                        if (showMsg) pushing.value = false; 
+                        pushing.value = false;
+                        loading.value = false;
                     }
                 };
                 
                 const onDataChange = async () => {
                     saveToLocal();
-                    if (autoSyncEnabled.value && githubToken.value && repoName.value) {
+                    if (autoSyncEnabled.value && githubToken.value && targetRepo.value) {
                         if (syncTimeout) clearTimeout(syncTimeout);
                         syncTimeout = setTimeout(async () => {
                             await pushToGitHub(false);
@@ -304,16 +331,27 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                 
                 const loadGitHubSettings = () => {
                     const token = localStorage.getItem('github_token');
-                    const repo = localStorage.getItem('github_repo');
-                    const path = localStorage.getItem('github_path');
+                    const repo = localStorage.getItem('target_repo');
+                    const path = localStorage.getItem('target_filepath');
                     const autoSync = localStorage.getItem('auto_sync_enabled');
                     const savedBranch = localStorage.getItem('github_branch');
+                    const savedData = localStorage.getItem('navData_manager_backup');
                     
                     if (token) { githubToken.value = token; saveToken.value = true; }
-                    if (repo) repoName.value = repo;
-                    if (path) filePath.value = path;
+                    if (repo) targetRepo.value = repo;
+                    if (path) targetFilePath.value = path;
                     if (savedBranch) branch.value = savedBranch;
                     if (autoSync === 'true') autoSyncEnabled.value = true;
+                    
+                    // 如果有本地缓存，先加载
+                    if (savedData) {
+                        try {
+                            const cached = JSON.parse(savedData);
+                            if (Array.isArray(cached) && cached.length > 0) {
+                                navData.value = cached;
+                            }
+                        } catch(e) {}
+                    }
                 };
                 
                 const saveGitHubSettings = () => {
@@ -322,8 +360,8 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                     } else if (!saveToken.value) {
                         localStorage.removeItem('github_token');
                     }
-                    localStorage.setItem('github_repo', repoName.value);
-                    localStorage.setItem('github_path', filePath.value);
+                    localStorage.setItem('target_repo', targetRepo.value);
+                    localStorage.setItem('target_filepath', targetFilePath.value);
                     localStorage.setItem('github_branch', branch.value);
                     showPushModal.value = false;
                     alert('设置已保存');
@@ -331,15 +369,15 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                 
                 const toggleAutoSync = () => {
                     localStorage.setItem('auto_sync_enabled', autoSyncEnabled.value);
-                    if (autoSyncEnabled.value && (!githubToken.value || !repoName.value)) {
-                        alert('请先在推送设置中配置 GitHub Token 和仓库名');
+                    if (autoSyncEnabled.value && (!githubToken.value || !targetRepo.value)) {
+                        alert('请先在推送设置中配置 GitHub Token 和目标仓库');
                         autoSyncEnabled.value = false;
                         localStorage.setItem('auto_sync_enabled', 'false');
                     }
                 };
                 
                 const resetToDefault = () => {
-                    if (confirm('重置将丢失所有修改，恢复到初始的13个项目。确定吗？')) {
+                    if (confirm('重置将丢失当前所有修改，恢复到默认数据。确定吗？')) {
                         navData.value = JSON.parse(JSON.stringify(defaultNavData));
                         onDataChange();
                     }
@@ -395,13 +433,13 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                 };
                 
                 const generateCode = () => { 
-                    generatedCode.value = `export const NAV_DATA = ${JSON.stringify(navData.value, null, 2)};`; 
+                    generatedCode.value = `import type { NavItem, NavCategory } from './types';\n\nexport const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};`; 
                     showCodeModal.value = true; 
                 };
                 
                 const copyCode = () => { navigator.clipboard.writeText(generatedCode.value); alert('代码已复制'); };
                 
-                // 拖拽排序（简化版，保持可用）
+                // 拖拽排序
                 let dragSourceCategory = null;
                 let dragSourceItem = null;
                 
@@ -410,7 +448,6 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                     e.dataTransfer.effectAllowed = 'move';
                     e.target.classList.add('dragging');
                 };
-                
                 const handleCategoryDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
                 const handleCategoryDragEnd = (e) => { e.target.classList.remove('dragging'); dragSourceCategory = null; };
                 const handleCategoryDrop = (e, targetCatIdx) => {
@@ -467,19 +504,23 @@ export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)}
                     dragSourceItem = null;
                 };
                 
-                onMounted(() => {
+                // 页面加载时自动从 GitHub 拉取数据
+                onMounted(async () => {
                     loadGitHubSettings();
+                    if (githubToken.value && targetRepo.value) {
+                        await loadFromGitHub(false);
+                    }
                     document.body.addEventListener('dragover', (e) => e.preventDefault());
                     document.body.addEventListener('drop', (e) => e.preventDefault());
                 });
                 
                 return {
                     navData, showCodeModal, generatedCode, showPushModal, 
-                    githubToken, saveToken, repoName, filePath, branch, commitMsg, pushing,
-                    autoSyncEnabled, showSaveTip, showSyncTip, syncTipText,
+                    githubToken, saveToken, targetRepo, targetFilePath, branch, commitMsg, pushing, loading, loadingText,
+                    autoSyncEnabled, showSaveTip, showSyncTip, saveTipText, syncTipText,
                     addCategory, removeCategory, addItem, removeItem, 
                     exportData, importData, generateCode, copyCode, 
-                    resetToDefault, onDataChange,
+                    resetToDefault, onDataChange, loadFromGitHub,
                     pushToGitHub, saveGitHubSettings, toggleAutoSync,
                     handleCategoryDragStart, handleCategoryDragOver, handleCategoryDragEnd, handleCategoryDrop,
                     handleItemDragStart, handleItemDragOver, handleItemDragEnd, handleItemDrop
