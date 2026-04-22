@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>导航数据管理器 - 自动同步版</title>
+    <title>导航数据管理器 - 双仓库同步版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -13,43 +13,12 @@
         .dragging { opacity: 0.4 !important; background: #dbeafe !important; }
         .drag-over { border-top: 3px solid #3b82f6 !important; background: #eff6ff !important; }
         [draggable="true"] { user-select: none; }
-        .save-indicator {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #10b981;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 1000;
-        }
+        .save-indicator { position: fixed; bottom: 20px; right: 20px; background: #10b981; color: white; padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; z-index: 1000; }
         .save-indicator.show { opacity: 1; }
-        .sync-indicator {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #f59e0b;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            z-index: 1000;
-        }
+        .sync-indicator { position: fixed; bottom: 20px; right: 20px; background: #f59e0b; color: white; padding: 8px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity 0.3s; z-index: 1000; }
         .sync-indicator.show { opacity: 1; }
-        .auto-sync-toggle {
-            background: #f3f4f6;
-            border-radius: 20px;
-            padding: 4px 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 13px;
-        }
+        .auto-sync-toggle { background: #f3f4f6; border-radius: 20px; padding: 4px 12px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .status-bar { background: #1e293b; color: #94a3b8; padding: 4px 12px; border-radius: 8px; font-size: 12px; }
     </style>
 </head>
 <body class="bg-gray-100 p-4 md:p-6">
@@ -143,17 +112,13 @@
         </div>
 
         <!-- 提示 -->
-        <div class="save-indicator" :class="{ show: showSaveTip }">
-            <i class="fas fa-check-circle"></i> 已保存到本地
-        </div>
-        <div class="sync-indicator" :class="{ show: showSyncTip }">
-            <i class="fab fa-github"></i> {{ syncTipText }}
-        </div>
+        <div class="save-indicator" :class="{ show: showSaveTip }"><i class="fas fa-check-circle"></i> 已保存到本地</div>
+        <div class="sync-indicator" :class="{ show: showSyncTip }"><i class="fab fa-github"></i> {{ syncTipText }}</div>
 
         <!-- 生成代码模态框 -->
         <div v-if="showCodeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" @click.self="showCodeModal=false">
             <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl"><h3 class="text-lg font-semibold">TypeScript 代码</h3><button @click="showCodeModal=false" class="text-gray-500 hover:text-gray-700"><i class="fas fa-times"></i></button></div>
                 <div class="flex-1 overflow-auto p-4"><pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto"><code>{{ generatedCode }}</code></pre></div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="copyCode" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">复制代码</button><button @click="showCodeModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">关闭</button></div>
             </div>
@@ -169,8 +134,8 @@
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">仓库 (owner/repo)</label><input v-model="repoName" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="857d/Ashguanggao"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label><input v-model="filePath" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="src/data/navData.ts"></div>
                     <div><label class="block text-sm font-medium text-gray-700 mb-1">分支</label><input v-model="branch" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="main"></div>
-                    <div class="bg-blue-50 border-l-4 border-blue-400 p-3 text-sm text-blue-800">
-                        <i class="fas fa-info-circle mr-1"></i> 开启"自动同步"后，任何修改都会自动推送到 GitHub
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">
+                        <i class="fas fa-info-circle mr-1"></i> 推送前请确认仓库中存在 <code>{{ filePath }}</code> 这个文件
                     </div>
                 </div>
                 <div class="px-6 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-xl"><button @click="showPushModal=false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded-lg text-sm">取消</button><button @click="saveGitHubSettings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm">保存设置</button></div>
@@ -181,7 +146,7 @@
     <script>
         const { createApp, ref, onMounted } = Vue;
 
-        // 完整默认数据（包含您所有的13个项目）
+        // 完整默认数据（13个项目）
         const defaultNavData = [
             {
                 title: "软件",
@@ -209,12 +174,8 @@
                 const loadInitialData = () => {
                     const saved = localStorage.getItem('navData_manager');
                     if (saved) {
-                        try { 
-                            return JSON.parse(saved);
-                        } catch(e) { 
-                            console.warn("解析保存的数据失败", e);
-                            return JSON.parse(JSON.stringify(defaultNavData));
-                        }
+                        try { return JSON.parse(saved); }
+                        catch(e) { return JSON.parse(JSON.stringify(defaultNavData)); }
                     }
                     return JSON.parse(JSON.stringify(defaultNavData));
                 };
@@ -228,7 +189,7 @@
                 const repoName = ref('857d/Ashguanggao');
                 const filePath = ref('src/data/navData.ts');
                 const branch = ref('main');
-                const commitMsg = ref('auto: update navigation data');
+                const commitMsg = ref('update: navigation data');
                 const pushing = ref(false);
                 const autoSyncEnabled = ref(false);
                 const showSaveTip = ref(false);
@@ -244,10 +205,10 @@
                     saveTipTimeout = setTimeout(() => { showSaveTip.value = false; }, 2000);
                 };
                 
-                const showSyncMessage = (text, isError = false) => {
+                const showSyncMessage = (text) => {
                     syncTipText.value = text;
                     showSyncTip.value = true;
-                    setTimeout(() => { showSyncTip.value = false; }, 3000);
+                    setTimeout(() => { showSyncTip.value = false; }, 4000);
                 };
                 
                 const saveToLocal = () => {
@@ -257,20 +218,28 @@
                 
                 const pushToGitHub = async (showMsg = true) => {
                     if (!githubToken.value) {
-                        if (showMsg) alert('请先在推送设置中配置 GitHub Token');
+                        if (showMsg) alert('请先配置 GitHub Token');
                         return false;
                     }
                     if (!repoName.value) {
-                        if (showMsg) alert('请先在推送设置中配置仓库名');
+                        if (showMsg) alert('请先配置仓库名');
                         return false;
                     }
                     
                     if (showMsg) pushing.value = true;
+                    showSyncMessage('⏳ 正在推送到 ' + filePath.value + ' ...');
                     
                     try {
-                        const fileContent = `// 导航数据 - 自动生成\nexport const NAV_DATA = ${JSON.stringify(navData.value, null, 2)};\n`;
+                        // 生成 TypeScript 格式的数据文件
+                        const fileContent = `// 导航数据 - 由导航管理器自动生成
+// 最后更新: ${new Date().toLocaleString()}
+import type { NavCategory } from './types';
+
+export const NAV_DATA: NavCategory[] = ${JSON.stringify(navData.value, null, 2)};
+`;
                         const encodedContent = btoa(unescape(encodeURIComponent(fileContent)));
                         
+                        // 先获取文件信息（如果存在）
                         const getUrl = `https://api.github.com/repos/${repoName.value}/contents/${filePath.value}`;
                         let sha = null;
                         try {
@@ -279,10 +248,16 @@
                             });
                             if (getRes.ok) { 
                                 const data = await getRes.json(); 
-                                sha = data.sha; 
+                                sha = data.sha;
+                                console.log('文件已存在，SHA:', sha);
+                            } else if (getRes.status === 404) {
+                                console.log('文件不存在，将创建新文件');
                             }
-                        } catch (err) { }
+                        } catch (err) { 
+                            console.log('检查文件时出错:', err);
+                        }
                         
+                        // 推送文件
                         const putBody = { 
                             message: `${commitMsg.value} - ${new Date().toLocaleString()}`, 
                             content: encodedContent, 
@@ -297,15 +272,20 @@
                         });
                         
                         if (putRes.ok) {
-                            showSyncMessage('✅ 已同步到 GitHub');
+                            showSyncMessage('✅ 推送成功！已更新 ' + filePath.value);
+                            if (showMsg) alert('推送成功！');
                             return true;
                         } else {
                             const err = await putRes.json();
-                            showSyncMessage('❌ 同步失败: ' + (err.message || '未知错误'), true);
+                            let errorMsg = err.message || '未知错误';
+                            if (err.message?.includes('sha')) errorMsg = '文件冲突，请稍后重试';
+                            showSyncMessage('❌ 推送失败: ' + errorMsg);
+                            if (showMsg) alert('推送失败: ' + errorMsg);
                             return false;
                         }
                     } catch (err) { 
-                        showSyncMessage('❌ 同步失败: ' + err.message, true);
+                        showSyncMessage('❌ 推送失败: ' + err.message);
+                        if (showMsg) alert('推送失败: ' + err.message);
                         return false;
                     } finally { 
                         if (showMsg) pushing.value = false; 
@@ -318,7 +298,7 @@
                         if (syncTimeout) clearTimeout(syncTimeout);
                         syncTimeout = setTimeout(async () => {
                             await pushToGitHub(false);
-                        }, 2000);
+                        }, 3000);
                     }
                 };
                 
@@ -342,9 +322,9 @@
                     } else if (!saveToken.value) {
                         localStorage.removeItem('github_token');
                     }
-                    if (repoName.value) localStorage.setItem('github_repo', repoName.value);
-                    if (filePath.value) localStorage.setItem('github_path', filePath.value);
-                    if (branch.value) localStorage.setItem('github_branch', branch.value);
+                    localStorage.setItem('github_repo', repoName.value);
+                    localStorage.setItem('github_path', filePath.value);
+                    localStorage.setItem('github_branch', branch.value);
                     showPushModal.value = false;
                     alert('设置已保存');
                 };
@@ -421,7 +401,7 @@
                 
                 const copyCode = () => { navigator.clipboard.writeText(generatedCode.value); alert('代码已复制'); };
                 
-                // 拖拽排序
+                // 拖拽排序（简化版，保持可用）
                 let dragSourceCategory = null;
                 let dragSourceItem = null;
                 
@@ -431,16 +411,8 @@
                     e.target.classList.add('dragging');
                 };
                 
-                const handleCategoryDragOver = (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                };
-                
-                const handleCategoryDragEnd = (e) => {
-                    e.target.classList.remove('dragging');
-                    dragSourceCategory = null;
-                };
-                
+                const handleCategoryDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+                const handleCategoryDragEnd = (e) => { e.target.classList.remove('dragging'); dragSourceCategory = null; };
                 const handleCategoryDrop = (e, targetCatIdx) => {
                     e.preventDefault();
                     if (dragSourceCategory !== null && dragSourceCategory !== targetCatIdx) {
@@ -458,26 +430,13 @@
                     e.dataTransfer.setData('text/plain', JSON.stringify({ catIdx, itemIdx }));
                     e.target.classList.add('dragging');
                 };
-                
-                const handleItemDragOver = (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                };
-                
-                const handleItemDragEnd = (e) => {
-                    e.target.classList.remove('dragging');
-                    dragSourceItem = null;
-                };
-                
+                const handleItemDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+                const handleItemDragEnd = (e) => { e.target.classList.remove('dragging'); dragSourceItem = null; };
                 const handleItemDrop = (e, targetCatIdx, targetItemIdx) => {
                     e.preventDefault();
                     if (!dragSourceItem) {
-                        try {
-                            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                            dragSourceItem = data;
-                        } catch(err) { return; }
+                        try { const data = JSON.parse(e.dataTransfer.getData('text/plain')); dragSourceItem = data; } catch(err) { return; }
                     }
-                    
                     const sourceCatIdx = dragSourceItem.categoryIdx;
                     const sourceItemIdx = dragSourceItem.itemIdx;
                     if (sourceCatIdx === undefined) return;
@@ -486,10 +445,7 @@
                     let finalTargetIdx = targetItemIdx;
                     if (targetRow) {
                         const rect = targetRow.getBoundingClientRect();
-                        const mouseY = e.clientY;
-                        if (mouseY > rect.top + rect.height / 2) {
-                            finalTargetIdx = targetItemIdx + 1;
-                        }
+                        if (e.clientY > rect.top + rect.height / 2) finalTargetIdx = targetItemIdx + 1;
                     }
                     
                     if (sourceCatIdx === targetCatIdx) {
